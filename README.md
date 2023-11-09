@@ -1,11 +1,5 @@
-## My Project
-
-TODO: Fill this README out!
-
-Be sure to:
-
-* Change the title in this README
-* Edit your repository description on GitHub
+## LLM Evaluation Examples
+To-Do: Adding examples with LLM evaluations around Bedrock, JumpStart, SageMaker Endpoints, and more. 
 
 ## Security
 
