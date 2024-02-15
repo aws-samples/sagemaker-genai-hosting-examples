@@ -1,5 +1,4 @@
-## LLM Evaluation Examples
-To-Do: Adding examples with LLM evaluations around Bedrock, JumpStart, SageMaker Endpoints, and more. 
+# LLM SageMaker Inference Examples
 
 ## Security
 
