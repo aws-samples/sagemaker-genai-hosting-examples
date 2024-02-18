@@ -6,7 +6,7 @@ SageMaker Inference is a highly performant and versatile hosting option that com
 ## Content
 To-Do: Add a folder with your model.
 
--[Mistral7B](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mistral)
+- [Mistral7B](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mistral)
 
 ## Additional Resources
 
