@@ -9,6 +9,8 @@ To-Do: Add a folder with your model.
 - [Mistral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mistral)
 - [Mixtral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mixtral)
 - [Falcon](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Falcon)
+- [Flan](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/FlanT5)
+- [Llama](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Llama2)
 
 ## Additional Resources
 
