@@ -4,13 +4,14 @@ This repository contains a compilation of examples of optimized deployment of po
 SageMaker Inference is a highly performant and versatile hosting option that comes with a variety of options that you can utilize to efficiently host your LLMs. In this repository we showcase how you can take different SageMaker Inference options such as Real-Time Inference (low latency, high throughput use-cases) and Asynchronous Inference (near real-time/batch use-cases) and integrate with Model Servers such as [DJL Serving](https://github.com/deepjavalibrary/djl-serving) and [Text Generation Inference](https://github.com/huggingface/text-generation-inference). We showcase how you can tune for performance via optimizing these different Model Serving stacks and also exploring hardware options such as [Inferentia2](https://aws.amazon.com/blogs/machine-learning/achieve-high-performance-with-lowest-cost-for-generative-ai-inference-using-aws-inferentia2-and-aws-trainium-on-amazon-sagemaker/) integration with Amazon SageMaker.
 
 ## Content
-To-Do: Add a folder with your model.
+If you are contributing, please add a link to your model below:
 
 - [Mistral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mistral)
 - [Mixtral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mixtral)
 - [Falcon](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Falcon)
 - [Flan](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/FlanT5)
 - [Llama](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Llama2)
+- [Zephyr](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Zephyr/Zephyr-7B)
 
 ## Additional Resources
 
