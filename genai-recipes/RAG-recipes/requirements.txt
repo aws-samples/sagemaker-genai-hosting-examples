@@ -1,0 +1,5 @@
+langchain==0.1.14
+pypdf==4.1.0
+faiss-cpu==1.8.0
+boto3==1.34.58
+sqlalchemy==2.0.29
