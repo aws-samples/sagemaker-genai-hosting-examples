@@ -16,6 +16,7 @@ If you are contributing, please add a link to your model below:
 ## Additional Resources
 
 - [Introduction to Large Model Inference Container](https://aws.amazon.com/blogs/machine-learning/boost-inference-performance-for-llms-with-new-amazon-sagemaker-containers/)
+- [LLM Inference Optimization Toolkit](https://aws.amazon.com/blogs/machine-learning/achieve-up-to-2x-higher-throughput-while-reducing-costs-by-50-for-generative-ai-inference-on-amazon-sagemaker-with-the-new-inference-optimization-toolkit-part-1/)
 - [Large Model Inference Container Tuning Guide](https://docs.djl.ai/docs/serving/serving/docs/lmi/tuning_guides/deepspeed_tuning_guide.html)
 - [Text Generation Inference with Amazon SageMaker](https://aws.amazon.com/blogs/machine-learning/announcing-the-launch-of-new-hugging-face-llm-inference-containers-on-amazon-sagemaker/)
 - [Server Side Batching Optimizations with LMI](https://aws.amazon.com/blogs/machine-learning/improve-throughput-performance-of-llama-2-models-using-amazon-sagemaker/)
