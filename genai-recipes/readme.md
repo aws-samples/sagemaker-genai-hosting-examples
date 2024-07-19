@@ -4,9 +4,10 @@ GenAI recipes is a collection of notebooks illustrating practical aspects of bui
 
 # Recipe Index
 
-
 1. [Code Generation on Sagemaker](./code-generation/code-generation.ipynb)
 2. [Function Calling on Sagemaker](./function-calling/deploy-llama3-functioncalling.ipynb)
+3. [Multi-LoRa-Adapters](./Multi-LoRA-Adapters/llama2-7b-mistral-7b-multi-lora-adapters.ipynb)
+4. [Inference Evaluation](./evaluate-inference/quantized_model_evaluations.ipynb)
 
 
 ## Security

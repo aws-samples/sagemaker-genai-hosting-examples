@@ -6,12 +6,16 @@ SageMaker Inference is a highly performant and versatile hosting option that com
 ## Content
 If you are contributing, please add a link to your model below:
 
-- [Mistral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mistral)
-- [Mixtral](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Mixtral)
-- [Falcon](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Falcon)
-- [Flan](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/FlanT5)
-- [Llama](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Llama2)
-- [Zephyr](https://github.com/aws-samples/sagemaker-genai-hosting-examples/tree/main/Zephyr/Zephyr-7B)
+- [Mistral](./Mistral/)
+- [Mixtral](./Mistral/)
+- [Falcon](./Falcon/)
+- [Flan](./FlanT5/)
+- [Llama2](./Llama2/)
+- [Llama3](./Llama3/)
+- [Open-Llama](./Open-Llama/)
+- [Zephyr](./Zephyr/)
+- [CodeGen](./Codegen25/)
+- [CodeLlama](./CodeLlama/)
 
 ## Additional Resources
 
