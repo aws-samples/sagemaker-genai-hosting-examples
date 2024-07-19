@@ -1,0 +1,2 @@
+# Evaluating Inference
+In this example we take a look at evaluating LLMs post inference optimization and deployment via the [FMEval library](https://github.com/aws/fmeval/tree/main). We first use the Inference Optimization Toolkit to quantize a Llama3-70B model via AWQ and then evaluate both the base and quantized models using FMEval to compare accuracy.
