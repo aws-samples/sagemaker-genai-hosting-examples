@@ -12,3 +12,7 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
         - 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess'
+# output the role name
+Outputs:
+  SageMakerEndpointRoleName:
+    Value: !GetAtt SageMakerEndpointRole.Arn
