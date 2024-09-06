@@ -1,7 +1,7 @@
 # TorchServe frontend parameters
 # Fix the number of workers by setting minWorkers and maxWorkers to the same value
-# Ex: For p4de.24xlarge, if we need 6 workers per GPU, then we need to set the
-#     number of workers to: No. of workers per GPU * No. of GPUs = 6 * 8 = 48
+# Ex: For p4d.24xlarge, if we need 1 workers per GPU, then we need to set the
+#     number of workers to: No. of workers per GPU * No. of GPUs = 1 * 8 = 8
 minWorkers: 8
 maxWorkers: 8
 # Batch size is 1 since we expect to handle only one session per worker
