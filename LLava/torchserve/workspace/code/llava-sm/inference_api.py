@@ -88,3 +88,9 @@ class InferenceAPI:
         return InferenceSession(
             start_time=now, last_use_time=now, session_id=request.session_id, state=state
         )
+if __name__ == "__main__":  
+    infer = InferenceAPI()
+    infer.load_model()
+    start_response = infer.start_session(StartSessionRequest("start_session_request", "https://images.pexels.com/photos/1519753/pexels-photo-1519753.jpeg","NEW_SESSION"))
+    send_text_response = infer.send_text_prompt(TextPromptRequest("send_text_prompt",start_response.session_id,"describe the picture"))
+    print(send_text_response.response_text)

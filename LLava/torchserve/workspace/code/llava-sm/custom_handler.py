@@ -41,7 +41,7 @@ class CancelHandler(BaseHandler):
         torch.cuda.set_device(self.device)
 
         identifier = f"{self.manifest['model']['modelName']}_store"
-        # a store for open sessions across worker processes. it contains one key and all the sessions. This will be one per SM Node
+        # a store for open sessions across worker processes. We use this store to aggregate metrics for a node.  It contains one key and all the sessions on a node. There will be one filestore per SM Node
         self.store_path = Path("/tmp") / identifier
         self.store = FileStore(self.store_path.as_posix(), -1)
 

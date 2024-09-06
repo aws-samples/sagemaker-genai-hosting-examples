@@ -4,23 +4,25 @@ import requests
 from pathlib import Path
 import time
 
-working_dir = "/home/model-server"
+# working_dir = "/home/model-server"
+working_dir = "/home/ec2-user/SageMaker"
 os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(working_dir,"weights")
-model_name = "llava-v1.5-13b"
+model_name = "llava-v1.5-7b"
 # url for the weights mirror
 REPLICATE_WEIGHTS_URL = "https://weights.replicate.delivery/default"
+HUGGING_FACE_WEIGHTS_URL = "https://huggingface.co/liuhaotian"
 # files to download from the weights mirrors
 weights = [
     {
         "dest": os.path.join(working_dir,model_name),
         # git commit hash from huggingface
-        "src": "llava-v1.5-13b/006818fc465ebda4c003c0998674d9141d8d95f8",
+        "src": "llava-v1.5-7b/resolve/main",
+        "base": HUGGING_FACE_WEIGHTS_URL,
         "files": [
             "config.json",
             "generation_config.json",
-            "pytorch_model-00001-of-00003.bin",
-            "pytorch_model-00002-of-00003.bin",
-            "pytorch_model-00003-of-00003.bin",
+            "pytorch_model-00001-of-00002.bin",
+            "pytorch_model-00002-of-00002.bin",
             "pytorch_model.bin.index.json",
             "special_tokens_map.json",
             "tokenizer.model",
@@ -30,6 +32,7 @@ weights = [
     {
         "dest": os.path.join(working_dir,"openai/clip-vit-large-patch14-336"),
         "src": "clip-vit-large-patch14-336/ce19dc912ca5cd21c8a653c79e251e808ccabcd1",
+        "base": REPLICATE_WEIGHTS_URL,
         "files": [
             "config.json",
             "preprocessor_config.json",
@@ -37,6 +40,7 @@ weights = [
         ],
     }
 ]
+
 
 def _download_json(url: str, dest: Path):
     res = requests.get(url, allow_redirects=True)
@@ -46,14 +50,15 @@ def _download_json(url: str, dest: Path):
     else:
         print(f"Failed to download {url}. Status code: {res.status_code}")
 
-def _download_weights(baseurl: str, basedest: str, files: list[str]):
+
+def _download_weights(baseurl: str, basedest: str, host: str, files: list[str]):
     basedest = Path(basedest)
     start = time.time()
-    print("downloading to: ", basedest)
+    print(f"downloading to: {basedest} and host {host} ")
     basedest.mkdir(parents=True, exist_ok=True)
     for f in files:
         dest = basedest / f
-        url = os.path.join(REPLICATE_WEIGHTS_URL, baseurl, f)
+        url = os.path.join(host, baseurl, f)
         if not dest.exists():
             print("downloading url: ", url)
             if dest.suffix == ".json":
@@ -62,7 +67,8 @@ def _download_weights(baseurl: str, basedest: str, files: list[str]):
                 subprocess.check_call(["pget", url, str(dest)], close_fds=False)
     print("downloading took: ", time.time() - start)
 
-#execute when not initalized by import
+
 if __name__ == '__main__':
     for w in weights:
-        _download_weights(w["src"], w["dest"], w["files"])
+        print(f"base is {w['base']}")
+        _download_weights(w["src"], w["dest"], w["base"], w["files"])

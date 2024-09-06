@@ -16,7 +16,7 @@ from cog import BasePredictor, Input, Path
 import os
 
 working_dir = "/home/model-server"
-model_name = "llava-v1.5-13b"
+model_name = "llava-v1.5-7b"
 model_weights_path = os.path.join(working_dir,model_name)
 os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(working_dir,"weights")
 

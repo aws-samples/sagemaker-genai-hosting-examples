@@ -16,7 +16,7 @@ from cog import BasePredictor, Input, Path
 import os
 
 working_dir = "/home/model-server"
-model_name = "llava-v1.5-13b"
+model_name = "llava-v1.5-7b"
 model_weights_path = os.path.join(working_dir,model_name)
 os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(working_dir,"weights")
 
@@ -57,6 +57,7 @@ class Predictor(BasePredictor):
                 temperature=temperature,
                 top_p=top_p,
                 max_new_tokens=max_tokens,
+                do_sample=True
             )
         
         generated_text = self.tokenizer.decode(output_ids.squeeze(), skip_special_tokens=True)
