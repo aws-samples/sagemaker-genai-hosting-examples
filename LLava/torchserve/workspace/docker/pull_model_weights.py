@@ -4,8 +4,8 @@ import requests
 from pathlib import Path
 import time
 
-# working_dir = "/home/model-server"
-working_dir = "/home/ec2-user/SageMaker"
+working_dir = "/home/model-server"
+# working_dir = "/home/ec2-user/SageMaker"
 os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(working_dir,"weights")
 model_name = "llava-v1.5-7b"
 # url for the weights mirror
