@@ -5,3 +5,4 @@ code/handler/ts/.DS_Store
 code/handler/ts/metrics/.ipynb_checkpoints/*
 docker/.ipynb_checkpoints/*
 .ipynb_checkpoints/*
+code/llava-sm/*
