@@ -6,4 +6,4 @@ we will use LLava to upload a image and then ask questions about the image witho
 
 We will be using TorchServe as our model server for this example.
 
-Please take a look at the accompaning blog <TODO add link>
+Please take a look at the accompanying [blog](https://aws.amazon.com/blogs/machine-learning/build-ultra-low-latency-multimodal-generative-ai-applications-using-sticky-session-routing-in-amazon/)
