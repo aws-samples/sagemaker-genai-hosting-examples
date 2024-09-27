@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to provision OpenSearch cluster and SageMaker Notebook for semantic search
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Required Parameters
+        Parameters:
+          - AppName          
+          - OpenSearchUsername
+          - OpenSearchPassword
+          - OpenSearchIndexName
+    ParameterLabels:      
+      AppName:
+        default: Name of the overall application
+      OpenSearchUsername:
+        default: OpenSearch cluster username
+      OpenSearchPassword:
+        default: OpenSearch cluster password
+      OpenSearchIndexName:
+        default: OpenSearch index name
+      
+Parameters:
+  InstanceType:
+    Type: String
+    Description: Choosing c5.large
+    Default: c5.large   
+  OpenSearchUsername:
+    AllowedPattern: '^[a-zA-Z0-9]+$'
+    Default: master
+    Description: User name for the account that will be added to the OpenSearch cluster.
+    MaxLength: '25'
+    MinLength: '5'
+    Type: String
+  OpenSearchPassword:
+    AllowedPattern: '(?=^.{8,32}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*'
+    Description: Password for the account named above. Must be at least 8 characters containing letters, numbers and symbols
+    MaxLength: '32'
+    MinLength: '8'
+    NoEcho: 'true'
+    Type: String
+    Default: Semantic123!
+  OpenSearchIndexName:
+    Default: llm_apps_workshop_embeddings
+    Type: String    
+    Description: Name of the OpenSearch index for storing embeddings.
+  AppName:
+    Default: opensearch-gen-ai
+    Type: String
+    AllowedValues: [opensearch-gen-ai]
+    Description: Name of the overall application, this is used while creating the ML model endpoint.
+
+Mappings: 
+  RegionMap: 
+    us-east-1:
+      HVM64: ami-041feb57c611358bd
+    us-west-2:
+      HVM64: ami-07d07d65c47e5aa90
+    eu-west-1:
+      HVM64: ami-0b9fd8b55a6e3c9d5
+ 
+Resources:
+
+  OpenSearchSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub OpenSearchSecret-${AWS::StackName}
+      Description: OpenSearch username and password
+      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "${OpenSearchPassword}" }'
+
+  OpenSearchServiceDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      AccessPolicies:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'es:*'
+            Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*/*
+      EngineVersion: 'OpenSearch_2.13'
+      ClusterConfig:
+        InstanceType: "r6g.2xlarge.search"
+      EBSOptions:
+        EBSEnabled: True
+        VolumeSize: 20
+        VolumeType: 'gp3'
+      AdvancedSecurityOptions:
+        AnonymousAuthEnabled: False
+        Enabled: True
+        InternalUserDatabaseEnabled: True
+        MasterUserOptions:
+          MasterUserName: !Sub ${OpenSearchUsername}
+          MasterUserPassword: !Sub ${OpenSearchPassword}
+      NodeToNodeEncryptionOptions:
+        Enabled: True
+      EncryptionAtRestOptions:
+        Enabled: True
+        KmsKeyId: alias/aws/es
+      DomainEndpointOptions:
+        EnforceHTTPS: True
+        
+Outputs:
+  OpenSearchDomainEndpoint:
+    Description: OpenSearch domain endpoint
+    Value:
+      'Fn::GetAtt':
+        - OpenSearchServiceDomain
+        - DomainEndpoint
+
+  OpenSourceDomainArn:
+    Description: OpenSearch domain ARN
+    Value:
+      'Fn::GetAtt':
+        - OpenSearchServiceDomain
+        - Arn
+
+  OpenSearchDomainName:
+    Description: OpenSearch domain name
+    Value: !Ref OpenSearchServiceDomain
+
+  Region:
+    Description: Deployed Region
+    Value: !Ref AWS::Region
+
+  OpenSearchSecret:
+    Description: Name of the OpenSearch secret in Secrets Manager
+    Value: !Ref OpenSearchSecret
+
