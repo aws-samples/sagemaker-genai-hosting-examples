@@ -40,7 +40,6 @@ Parameters:
     MinLength: '8'
     NoEcho: 'true'
     Type: String
-    Default: Semantic123!
   OpenSearchIndexName:
     Default: llm_apps_workshop_embeddings
     Type: String    
