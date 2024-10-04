@@ -1,0 +1,8 @@
+code/data/.ipynb_checkpoints/*
+code/handler/test/pytest/.ipynb_checkpoints/*
+code/handler/test/pytest/demo_data/.ipynb_checkpoints/*
+code/handler/ts/.DS_Store
+code/handler/ts/metrics/.ipynb_checkpoints/*
+docker/.ipynb_checkpoints/*
+.ipynb_checkpoints/*
+code/llama32vision-sm/*
