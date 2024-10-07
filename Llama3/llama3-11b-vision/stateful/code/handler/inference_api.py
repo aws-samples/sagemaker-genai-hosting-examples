@@ -52,11 +52,11 @@ class InferenceAPI:
         Load the model and processor based on the 11B or 90B model.
         """
         logger.info(f"MYLOGS-MODEL: start loading model to {self.device}")
-        model = MllamaForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16,use_safetensors=True, device_map=self.device,
+        self.model = MllamaForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16,use_safetensors=True, device_map=self.device,
                                                             token=self.hf_token)
-        processor = MllamaProcessor.from_pretrained(model_name, token=self.hf_token,use_safetensors=True)
+        self.processor = MllamaProcessor.from_pretrained(model_name, token=self.hf_token,use_safetensors=True)
 
-        model, processor=accelerator.prepare(model, processor)
+        self.model, self.processor=accelerator.prepare(self.model, self.processor)
         logger.info(f"MYLOGS-MODEL: done loading model to {self.device}")
 
         

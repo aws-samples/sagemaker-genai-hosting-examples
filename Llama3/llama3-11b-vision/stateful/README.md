@@ -1,4 +1,4 @@
-# Stateful inference using SageMaker endpoints (Work in progress, please dont use this code yet!)
+# Stateful inference using SageMaker endpoints
 
 This is an example of how customers can leverage sticky routing feature in Amazon SageMaker to achieve stateful model Inference, when using Llama 3.2 vision model.
 

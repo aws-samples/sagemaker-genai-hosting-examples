@@ -6,3 +6,6 @@ code/handler/ts/metrics/.ipynb_checkpoints/*
 docker/.ipynb_checkpoints/*
 .ipynb_checkpoints/*
 code/llama32vision-sm/*
+.env
+.ipynb_checkpoints/*
+code/handler/.ipynb_checkpoints/*

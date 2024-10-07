@@ -2,14 +2,14 @@
 # Fix the number of workers by setting minWorkers and maxWorkers to the same value
 # Ex: For g5.4xlarge which has 1 gpu, if we need 1 workers per GPU, then we need to set the
 #     number of workers to: No. of workers per GPU * No. of GPUs = 1 * 1 = 1
-minWorkers: 1
-maxWorkers: 1
+minWorkers: 8
+maxWorkers: 8
 # Batch size is 1 since we expect to handle only one session per worker
 # and requests for the same session must be processed sequentially
 batchSize: 1
 # Configure the maximum number of sessions that can be open simultaneously across all workers
 # Set this to be equal to the number of workers (one session per worker)
-maxNumSequence: 1
+maxNumSequence: 8
 # Set maximum session idle time to be same as the sessionExpiryInMinutes
 # used by SageMaker so that TorchServe does not expire a session prematurely
 sequenceMaxIdleMSec: 900000
@@ -17,7 +17,7 @@ sequenceMaxIdleMSec: 900000
 # used by SageMaker so that TorchServe does not expire a session prematurely
 sequenceTimeoutMSec: 900000
 # Maximum number of requests that can be queued for a single session
-maxSequenceJobQueueSize: 1
+maxSequenceJobQueueSize: 8
 # Enable sequence continuous batching
 sequenceBatching: true
 continuousBatching: true
