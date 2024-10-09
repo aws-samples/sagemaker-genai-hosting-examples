@@ -6,4 +6,12 @@ we will use Llama 3.2 vision model to upload a image and then ask questions abou
 
 We will be using TorchServe as our model server for this example.
 
-Please take a look at the accompanying [workshop]
+Please take a look at the accompanying [workshop TBD]
+
+## Create role to run this notebook
+```
+aws cloudformation create-stack --stack-name sm-vision-stateful-role \
+--template-body https://raw.githubusercontent.com/aws-samples/sagemaker-genai-hosting-examples/refs/heads/main/Llama3/llama3-11b-vision/stateful/sm_vision_stateful_role.yaml \
+--capabilities CAPABILITY_NAMED_IAM \
+--region us-west-2
+```
