@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: text-inference
+  namespace: hyperpod-ns-inference
+  labels:
+    app: text-inference
+    kueue.x-k8s.io/queue-name: hyperpod-ns-inference-localqueue
+    kueue.x-k8s.io/priority-class: inference-priority
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: text-inference
+  template:
+    metadata:
+      labels:
+        app: text-inference
+        kueue.x-k8s.io/queue-name: hyperpod-ns-inference-localqueue
+        kueue.x-k8s.io/priority-class: inference-priority
+    spec:
+      nodeSelector:
+        beta.kubernetes.io/instance-type: ml.g5.2xlarge
+      containers:
+        - name: text-generation-inference
+          image: ghcr.io/huggingface/text-generation-inference:2.1.1
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 4Gi
+              nvidia.com/gpu: 1
+          command:
+            - "text-generation-launcher"
+            - "--model-id"
+            - "mistralai/Mistral-7B-Instruct-v0.2"
+            - "--num-shard"
+            - "1"
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: model
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              value: "hf_" #Remember to subscribe to the mdoel and add your huggingface token here
+      volumes:
+        - name: model
+          hostPath:
+            path: /opt/dlami/nvme
+            type: DirectoryOrCreate
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-inference-nlb
+  namespace: hyperpod-ns-inference
+  annotations:
+    # NLB specific annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: text-inference
+  type: LoadBalancer
