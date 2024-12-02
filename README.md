@@ -26,6 +26,7 @@ If you are contributing, please add a link to your model below:
 - [Server Side Batching Optimizations with LMI](https://aws.amazon.com/blogs/machine-learning/improve-throughput-performance-of-llama-2-models-using-amazon-sagemaker/)
 - [General SageMaker Hosting Examples Repo](https://github.com/aws-samples/sagemaker-hosting)
 - [SageMaker Hosting Blog Series](https://aws.amazon.com/blogs/machine-learning/model-hosting-patterns-in-amazon-sagemaker-part-1-common-design-patterns-for-building-ml-applications-on-amazon-sagemaker/)
+- [Easily deploy and manage hundreds of LoRA Adapters](https://aws.amazon.com/blogs/machine-learning/easily-deploy-and-manage-hundreds-of-lora-adapters-with-sagemaker-efficient-multi-adapter-inference/)
 
 ## Security
 
