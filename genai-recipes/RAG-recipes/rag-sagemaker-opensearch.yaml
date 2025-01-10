@@ -6,11 +6,8 @@ Metadata:
     ParameterGroups:
       - Label:
           default: Required Parameters
-        Parameters:
-          - AppName          
-          - OpenSearchUsername
+        Parameters:         
           - OpenSearchPassword
-          - OpenSearchIndexName
     ParameterLabels:      
       AppName:
         default: Name of the overall application
@@ -20,6 +17,8 @@ Metadata:
         default: OpenSearch cluster password
       OpenSearchIndexName:
         default: OpenSearch index name
+      SageMakerNotebookName:
+        default: Name of SageMaker Notebook Instance
       
 Parameters:
   InstanceType:
@@ -28,7 +27,7 @@ Parameters:
     Default: c5.large   
   OpenSearchUsername:
     AllowedPattern: '^[a-zA-Z0-9]+$'
-    Default: master
+    Default: admin
     Description: User name for the account that will be added to the OpenSearch cluster.
     MaxLength: '25'
     MinLength: '5'
@@ -41,14 +40,19 @@ Parameters:
     NoEcho: 'true'
     Type: String
   OpenSearchIndexName:
-    Default: llm_apps_workshop_embeddings
+    Default: sagemaker-rag-opensearch-embeddings
     Type: String    
     Description: Name of the OpenSearch index for storing embeddings.
   AppName:
-    Default: opensearch-gen-ai
+    Default: sagemaker-rag-opensearch
     Type: String
-    AllowedValues: [opensearch-gen-ai]
+    AllowedValues: [sagemaker-rag-opensearch]
     Description: Name of the overall application, this is used while creating the ML model endpoint.
+  SageMakerNotebookName:
+    Default: sagemaker-rag-opensearch-notebook
+    Type: String
+    AllowedValues: [sagemaker-rag-opensearch-notebook]
+    Description: Name of the SageMaker Notebook Instance.
 
 Mappings: 
   RegionMap: 
@@ -100,6 +104,54 @@ Resources:
         KmsKeyId: alias/aws/es
       DomainEndpointOptions:
         EnforceHTTPS: True
+  
+  CodeRepository:
+    Type: AWS::SageMaker::CodeRepository
+    Properties:
+      GitConfig:
+        RepositoryUrl:  https://github.com/aws-samples/sagemaker-genai-hosting-examples.git
+  
+  NBRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: SecretsManagerReadWrite
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:UpdateSecret
+                Resource: !Ref OpenSearchSecret
+        - PolicyName: CloudFormationReadThisTemplateOutputs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole        
+
+  NotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: !Ref SageMakerNotebookName
+      InstanceType: ml.t3.medium
+      RoleArn: !GetAtt NBRole.Arn
+      VolumeSizeInGB : 50
+      DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName
         
 Outputs:
   OpenSearchDomainEndpoint:
@@ -127,4 +179,22 @@ Outputs:
   OpenSearchSecret:
     Description: Name of the OpenSearch secret in Secrets Manager
     Value: !Ref OpenSearchSecret
+
+  SageMakerNotebookURL:
+    Description: SageMaker Notebook Instance
+    Value: !Join
+      - ''
+      - - 'https://console.aws.amazon.com/sagemaker/home?region='
+        - !Ref AWS::Region
+        - '#/notebook-instances/openNotebook/'
+        - !GetAtt NotebookInstance.NotebookInstanceName
+        - '?view=lab'
+        
+  NotebookRole:
+    Description: Sagemaker notebook instance role
+    Value: !Ref NBRole
+
+  NotebookRoleArn:
+    Description: Sagemaker Notebook instance role ARN
+    Value: !GetAtt NBRole.Arn
 
