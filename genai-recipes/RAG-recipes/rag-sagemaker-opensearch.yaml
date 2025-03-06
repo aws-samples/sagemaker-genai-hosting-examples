@@ -152,6 +152,8 @@ Resources:
       RoleArn: !GetAtt NBRole.Arn
       VolumeSizeInGB : 50
       DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName
+      InstanceMetadataServiceConfiguration:
+        MinimumInstanceMetadataServiceVersion: 2
         
 Outputs:
   OpenSearchDomainEndpoint:
