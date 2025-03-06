@@ -64,12 +64,52 @@ Mappings:
       HVM64: ami-0b9fd8b55a6e3c9d5
  
 Resources:
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting resources
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow SageMaker to use the key
+            Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: 
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: Allow Secrets Manager to use the key
+            Effect: Allow
+            Principal:
+              Service: secretsmanager.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource: '*'
+
+  KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-key'
+      TargetKeyId: !Ref KMSKey
 
   OpenSearchSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub OpenSearchSecret-${AWS::StackName}
       Description: OpenSearch username and password
+      KmsKeyId: !Ref KMSKey
       SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "${OpenSearchPassword}" }'
 
   OpenSearchServiceDomain:
@@ -136,6 +176,15 @@ Resources:
                 Action:
                   - cloudformation:DescribeStacks
                 Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+        - PolicyName: KMSKeyAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: !GetAtt KMSKey.Arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -152,6 +201,7 @@ Resources:
       RoleArn: !GetAtt NBRole.Arn
       VolumeSizeInGB : 50
       DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName
+      KmsKeyId: !GetAtt KMSKey.Arn
       InstanceMetadataServiceConfiguration:
         MinimumInstanceMetadataServiceVersion: 2
         
