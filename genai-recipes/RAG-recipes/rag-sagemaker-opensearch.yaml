@@ -8,6 +8,9 @@ Metadata:
           default: Required Parameters
         Parameters:         
           - OpenSearchPassword
+          - VpcId
+          - SubnetIds
+          - SecurityGroupIds
     ParameterLabels:      
       AppName:
         default: Name of the overall application
@@ -19,6 +22,12 @@ Metadata:
         default: OpenSearch index name
       SageMakerNotebookName:
         default: Name of SageMaker Notebook Instance
+      VpcId:
+        default: VPC ID
+      SubnetIds:
+        default: Subnet IDs
+      SecurityGroupIds:
+        default: Security Group IDs
       
 Parameters:
   InstanceType:
@@ -53,6 +62,15 @@ Parameters:
     Type: String
     AllowedValues: [sagemaker-rag-opensearch-notebook]
     Description: Name of the SageMaker Notebook Instance.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for OpenSearch domain
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of subnet IDs for OpenSearch domain
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: List of security group IDs for OpenSearch domain
 
 Mappings: 
   RegionMap: 
@@ -157,6 +175,9 @@ Resources:
         AUDIT_LOGS:
           CloudWatchLogsLogGroupArn: !GetAtt OpenSearchLogGroup.Arn
           Enabled: true
+      VPCOptions:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds: !Ref SecurityGroupIds
 
   OpenSearchLogGroup:
     Type: AWS::Logs::LogGroup
@@ -287,6 +308,7 @@ Outputs:
   NotebookRole:
     Description: Sagemaker notebook instance role
     Value: !Ref NBRole
+    Description: Sagem
 
   NotebookRoleArn:
     Description: Sagemaker Notebook instance role ARN
