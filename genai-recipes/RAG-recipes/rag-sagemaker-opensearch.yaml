@@ -7,7 +7,7 @@ Metadata:
       - Label:
           default: Required Parameters
         Parameters:         
-          - OpenSearchPassword
+          - OpenSearchPasswordArn
           - VpcId
           - SubnetIds
           - SecurityGroupIds
@@ -16,8 +16,8 @@ Metadata:
         default: Name of the overall application
       OpenSearchUsername:
         default: OpenSearch cluster username
-      OpenSearchPassword:
-        default: OpenSearch cluster password
+      OpenSearchPasswordArn:
+        default: ARN of OpenSearch password in Secrets Manager
       OpenSearchIndexName:
         default: OpenSearch index name
       SageMakerNotebookName:
@@ -41,13 +41,9 @@ Parameters:
     MaxLength: '25'
     MinLength: '5'
     Type: String
-  OpenSearchPassword:
-    AllowedPattern: '(?=^.{8,32}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*'
-    Description: Password for the account named above. Must be at least 8 characters containing letters, numbers and symbols
-    MaxLength: '32'
-    MinLength: '8'
-    NoEcho: 'true'
+  OpenSearchPasswordArn:
     Type: String
+    Description: ARN of the secret containing the OpenSearch password in Secrets Manager
   OpenSearchIndexName:
     Default: sagemaker-rag-opensearch-embeddings
     Type: String    
@@ -128,7 +124,7 @@ Resources:
       Name: !Sub OpenSearchSecret-${AWS::StackName}
       Description: OpenSearch username and password
       KmsKeyId: !Ref KMSKey
-      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "${OpenSearchPassword}" }'
+      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "{{resolve:secretsmanager:${OpenSearchPasswordArn}:SecretString}}" }'
 
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
@@ -154,7 +150,7 @@ Resources:
         InternalUserDatabaseEnabled: True
         MasterUserOptions:
           MasterUserName: !Sub ${OpenSearchUsername}
-          MasterUserPassword: !Sub ${OpenSearchPassword}
+          MasterUserPassword: !Sub '{{resolve:secretsmanager:${OpenSearchPasswordArn}:SecretString}}'
       NodeToNodeEncryptionOptions:
         Enabled: True
       EncryptionAtRestOptions:
@@ -230,7 +226,9 @@ Resources:
                   - secretsmanager:DescribeSecret
                   - secretsmanager:PutSecretValue
                   - secretsmanager:UpdateSecret
-                Resource: !Ref OpenSearchSecret
+                Resource: 
+                  - !Ref OpenSearchSecret
+                  - !Ref OpenSearchPasswordArn
         - PolicyName: CloudFormationReadThisTemplateOutputs
           PolicyDocument:
             Version: '2012-10-17'
