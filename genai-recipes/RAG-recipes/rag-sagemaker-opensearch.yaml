@@ -8,9 +8,6 @@ Metadata:
           default: Required Parameters
         Parameters:         
           - OpenSearchPasswordArn
-          - VpcId
-          - SubnetIds
-          - SecurityGroupIds
     ParameterLabels:      
       AppName:
         default: Name of the overall application
@@ -106,17 +103,46 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-private-subnet
 
-  SecurityGroup:
-    Condition: CreateVPCResources
+  SageMakerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for SageMaker
+      VpcId: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  OpenSearchSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for OpenSearch
       VpcId: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  SageMakerToOpenSearchIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OpenSearchSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref SageMakerSecurityGroup
+
+  OpenSearchToSageMakerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SageMakerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref OpenSearchSecurityGroup
+
 
   InternetGateway:
     Condition: CreateVPCResources
@@ -128,6 +154,19 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
+
+  EIP:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIP.AllocationId
+      SubnetId: !Ref PrivateSubnet
 
   RouteTable:
     Condition: CreateVPCResources
@@ -142,7 +181,7 @@ Resources:
     Properties:
       RouteTableId: !Ref RouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
+      NatGatewayId: !Ref NatGateway
 
   SubnetRouteTableAssociation:
     Condition: CreateVPCResources
@@ -150,7 +189,6 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet
       RouteTableId: !Ref RouteTable
-
   KMSKey:
     Type: AWS::KMS::Key
     Properties:
@@ -223,6 +261,8 @@ Resources:
         KmsKeyId: alias/aws/es
       DomainEndpointOptions:
         EnforceHTTPS: True
+        CustomEndpointEnabled: false
+        TLSSecurityPolicy: "Policy-Min-TLS-1-2-2019-07"
       LogPublishingOptions:
         SEARCH_SLOW_LOGS:
           CloudWatchLogsLogGroupArn: !GetAtt OpenSearchLogGroup.Arn
@@ -238,15 +278,9 @@ Resources:
           Enabled: true
       VPCOptions:
         SubnetIds: 
-          !If 
-            - CreateVPCResources
-            - [!Ref PrivateSubnet]
-            - !Split [",", !Ref SubnetIds]
+          !If [CreateVPCResources,[!Ref PrivateSubnet], !Split [",", !Ref SubnetIds]]
         SecurityGroupIds: 
-          !If 
-            - CreateVPCResources
-            - [!Ref SecurityGroup]
-            - !Split [",", !Ref SecurityGroupIds]
+          !If [CreateVPCResources, [!Ref OpenSearchSecurityGroup], !Split [",", !Ref SecurityGroupIds]] 
 
   OpenSearchLogGroup:
     Type: AWS::Logs::LogGroup
@@ -289,6 +323,14 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
       Policies:
+        - PolicyName: OpenSearchAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - es:ESHttp*
+                Resource: !GetAtt OpenSearchServiceDomain.Arn
         - PolicyName: SecretsManagerReadWrite
           PolicyDocument:
             Version: '2012-10-17'
@@ -338,34 +380,16 @@ Resources:
       InstanceMetadataServiceConfiguration:
         MinimumInstanceMetadataServiceVersion: 2
       SubnetId: !If [CreateVPCResources, !Ref PrivateSubnet, !Select [0, !Split [",", !Ref SubnetIds]]]
-      SecurityGroupIds: !If [CreateVPCResources, [!Ref SecurityGroup], !Split [",", !Ref SecurityGroupIds]]        
+      SecurityGroupIds: !If [CreateVPCResources, [!Ref SageMakerSecurityGroup], !Split [",", !Ref SecurityGroupIds]]        
 
-# create vpc endpoint for open search
-  OpenSearchVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.es'
-      RouteTableIds:
-        - !Ref RouteTable
-      SecurityGroupIds: 
-        !If 
-          - CreateVPCResources
-          - [!Ref SecurityGroup]
-          - !Split [",", !Ref SecurityGroupIds]
-      SubnetIds: 
-        !If 
-          - CreateVPCResources
-          - [!Ref PrivateSubnet]
-          - !Split [",", !Ref SubnetIds]
 
 Outputs:
   OpenSearchDomainEndpoint:
     Description: OpenSearch domain endpoint
-    Value:
-      'Fn::GetAtt':
-        - OpenSearchServiceDomain
-        - DomainEndpoint
+    Value: 
+          'Fn::GetAtt':
+            - OpenSearchServiceDomain
+            - DomainEndpoint
 
   OpenSourceDomainArn:
     Description: OpenSearch domain ARN
@@ -408,11 +432,15 @@ Outputs:
     Description: Subnet ID
     Value: !If [CreateVPCResources, !Ref PrivateSubnet, !Ref SubnetIds]
 
-  SecurityGroupId:
-    Description: Security Group ID
-    Value: !If [CreateVPCResources, !Ref SecurityGroup, !Ref SecurityGroupIds]
+  SageMakerSecurityGroupId:
+    Description: SageMaker Security Group ID
+    Value: !If [CreateVPCResources, !Ref SageMakerSecurityGroup, !Ref SecurityGroupIds]
 
-# output OpenSearchUsername
+  OpenSearchSecurityGroupId:
+    Description: OpenSearch Security Group ID
+    Value: !If [CreateVPCResources, !Ref OpenSearchSecurityGroup, !Ref SecurityGroupIds]
+
+
   OpenSearchUsername:
     Description: OpenSearch username
     Value: !Ref OpenSearchUsername
