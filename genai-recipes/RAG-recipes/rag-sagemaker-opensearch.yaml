@@ -23,11 +23,11 @@ Metadata:
       SageMakerNotebookName:
         default: Name of SageMaker Notebook Instance
       VpcId:
-        default: VPC ID
+        default: VPC ID (leave empty for auto-creation)
       SubnetIds:
-        default: Subnet IDs
+        default: Subnet IDs (leave empty for auto-creation)
       SecurityGroupIds:
-        default: Security Group IDs
+        default: Security Group IDs (leave empty for auto-creation)
       
 Parameters:
   InstanceType:
@@ -59,14 +59,20 @@ Parameters:
     AllowedValues: [sagemaker-rag-opensearch-notebook]
     Description: Name of the SageMaker Notebook Instance.
   VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: VPC ID for OpenSearch domain
+    Type: String
+    Description: VPC ID for OpenSearch domain (leave empty for auto-creation)
+    Default: ""
   SubnetIds:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: List of subnet IDs for OpenSearch domain
+    Type: String
+    Description: Comma-separated list of subnet IDs for OpenSearch domain (leave empty for auto-creation)
+    Default: ""
   SecurityGroupIds:
-    Type: List<AWS::EC2::SecurityGroup::Id>
-    Description: List of security group IDs for OpenSearch domain
+    Type: String
+    Description: Comma-separated list of security group IDs (leave empty for auto-creation)
+    Default: ""
+
+Conditions:
+  CreateVPCResources: !Equals [!Ref VpcId, ""]
 
 Mappings: 
   RegionMap: 
@@ -78,6 +84,73 @@ Mappings:
       HVM64: ami-0b9fd8b55a6e3c9d5
  
 Resources:
+  VPC:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-vpc
+
+  PrivateSubnet:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-private-subnet
+
+  SecurityGroup:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for OpenSearch
+      VpcId: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+
+  InternetGateway:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTable:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  Route:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Condition: CreateVPCResources
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref RouteTable
+
   KMSKey:
     Type: AWS::KMS::Key
     Properties:
@@ -117,14 +190,6 @@ Resources:
     Properties:
       AliasName: !Sub 'alias/${AWS::StackName}-key'
       TargetKeyId: !Ref KMSKey
-
-  OpenSearchSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: !Sub OpenSearchSecret-${AWS::StackName}
-      Description: OpenSearch username and password
-      KmsKeyId: !Ref KMSKey
-      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "{{resolve:secretsmanager:${OpenSearchPasswordArn}:SecretString}}" }'
 
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
@@ -172,8 +237,16 @@ Resources:
           CloudWatchLogsLogGroupArn: !GetAtt OpenSearchLogGroup.Arn
           Enabled: true
       VPCOptions:
-        SubnetIds: !Ref SubnetIds
-        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: 
+          !If 
+            - CreateVPCResources
+            - [!Ref PrivateSubnet]
+            - !Split [",", !Ref SubnetIds]
+        SecurityGroupIds: 
+          !If 
+            - CreateVPCResources
+            - [!Ref SecurityGroup]
+            - !Split [",", !Ref SecurityGroupIds]
 
   OpenSearchLogGroup:
     Type: AWS::Logs::LogGroup
@@ -208,7 +281,7 @@ Resources:
     Type: AWS::SageMaker::CodeRepository
     Properties:
       GitConfig:
-        RepositoryUrl:  https://github.com/aws-samples/sagemaker-genai-hosting-examples.git
+        RepositoryUrl: https://github.com/aws-samples/sagemaker-genai-hosting-examples.git
   
   NBRole:
     Type: AWS::IAM::Role
@@ -227,7 +300,6 @@ Resources:
                   - secretsmanager:PutSecretValue
                   - secretsmanager:UpdateSecret
                 Resource: 
-                  - !Ref OpenSearchSecret
                   - !Ref OpenSearchPasswordArn
         - PolicyName: CloudFormationReadThisTemplateOutputs
           PolicyDocument:
@@ -260,7 +332,7 @@ Resources:
       NotebookInstanceName: !Ref SageMakerNotebookName
       InstanceType: ml.t3.medium
       RoleArn: !GetAtt NBRole.Arn
-      VolumeSizeInGB : 50
+      VolumeSizeInGB: 50
       DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName
       KmsKeyId: !GetAtt KMSKey.Arn
       InstanceMetadataServiceConfiguration:
@@ -289,10 +361,6 @@ Outputs:
     Description: Deployed Region
     Value: !Ref AWS::Region
 
-  OpenSearchSecret:
-    Description: Name of the OpenSearch secret in Secrets Manager
-    Value: !Ref OpenSearchSecret
-
   SageMakerNotebookURL:
     Description: SageMaker Notebook Instance
     Value: !Join
@@ -306,9 +374,19 @@ Outputs:
   NotebookRole:
     Description: Sagemaker notebook instance role
     Value: !Ref NBRole
-    Description: Sagem
 
   NotebookRoleArn:
     Description: Sagemaker Notebook instance role ARN
     Value: !GetAtt NBRole.Arn
 
+  VpcId:
+    Description: VPC ID
+    Value: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
+
+  SubnetId:
+    Description: Subnet ID
+    Value: !If [CreateVPCResources, !Ref PrivateSubnet, !Ref SubnetIds]
+
+  SecurityGroupId:
+    Description: Security Group ID
+    Value: !If [CreateVPCResources, !Ref SecurityGroup, !Ref SecurityGroupIds]
