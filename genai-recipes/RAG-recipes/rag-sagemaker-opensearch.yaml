@@ -337,7 +337,28 @@ Resources:
       KmsKeyId: !GetAtt KMSKey.Arn
       InstanceMetadataServiceConfiguration:
         MinimumInstanceMetadataServiceVersion: 2
-        
+      SubnetId: !If [CreateVPCResources, !Ref PrivateSubnet, !Select [0, !Split [",", !Ref SubnetIds]]]
+      SecurityGroupIds: !If [CreateVPCResources, [!Ref SecurityGroup], !Split [",", !Ref SecurityGroupIds]]        
+
+# create vpc endpoint for open search
+  OpenSearchVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !If [CreateVPCResources, !Ref VPC, !Ref VpcId]
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.es'
+      RouteTableIds:
+        - !Ref RouteTable
+      SecurityGroupIds: 
+        !If 
+          - CreateVPCResources
+          - [!Ref SecurityGroup]
+          - !Split [",", !Ref SecurityGroupIds]
+      SubnetIds: 
+        !If 
+          - CreateVPCResources
+          - [!Ref PrivateSubnet]
+          - !Split [",", !Ref SubnetIds]
+
 Outputs:
   OpenSearchDomainEndpoint:
     Description: OpenSearch domain endpoint
