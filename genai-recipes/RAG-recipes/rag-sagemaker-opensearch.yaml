@@ -390,3 +390,12 @@ Outputs:
   SecurityGroupId:
     Description: Security Group ID
     Value: !If [CreateVPCResources, !Ref SecurityGroup, !Ref SecurityGroupIds]
+
+# output OpenSearchUsername
+  OpenSearchUsername:
+    Description: OpenSearch username
+    Value: !Ref OpenSearchUsername
+
+  OpenSearchPasswordArn:
+    Description: OpenSearch password ARN
+    Value: !Ref OpenSearchPasswordArn
