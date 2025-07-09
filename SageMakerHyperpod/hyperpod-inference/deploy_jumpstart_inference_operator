@@ -1,0 +1,38 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1alpha1
+kind: JumpStartModel
+metadata:
+  name: deepseek-llm-r1-distill-qwen-1-5b-july03
+  namespace: default
+spec:
+  sageMakerEndpoint:
+    name: deepseek-llm-r1-distill-qwen-1-5b
+  model:
+    modelHubName: SageMakerPublicHub
+    modelId: deepseek-llm-r1-distill-qwen-1-5b
+    modelVersion: 2.0.4
+  server:
+    instanceType: ml.g5.8xlarge
+  metrics:
+    enabled: true
+  environmentVariables:
+    - name: SAMPLE_ENV_VAR
+      value: "sample_value"
+  maxDeployTimeInSeconds: 1800
+  tlsConfig:
+    tlsCertificateOutputS3Uri: "s3://bucket-name/certificates"
+  autoScalingSpec:
+    cloudWatchTrigger:
+      name: "SageMaker-Invocations"
+      namespace: "AWS/SageMaker"
+      useCachedMetrics: false
+      metricName: "Invocations"
+      targetValue: 10
+      minValue: 0.0
+      metricCollectionPeriod: 30
+      metricStat: "Sum"
+      metricType: "Average"
+      dimensions:
+        - name: "EndpointName"
+          value: "deepseek-llm-r1-distill-qwen-1-5"
+        - name: "VariantName"
+          value: "AllTraffic"
