@@ -2,23 +2,25 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "S3Access",
       "Effect": "Allow",
       "Action": [
-        "s3:Get*",
-        "s3:List*",
-        "s3:Describe*",
-        "s3:PutObject"
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "ECRAccess",
       "Effect": "Allow",
       "Action": [
-        "ecr:GetAuthorizationToken",
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
         "ecr:BatchCheckLayerAvailability",
         "ecr:GetDownloadUrlForLayer",
         "ecr:GetRepositoryPolicy",
@@ -31,12 +33,9 @@
         "ecr:ListTagsForResource",
         "ecr:DescribeImageScanFindings"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "EC2Access",
       "Effect": "Allow",
       "Action": [
         "ec2:AssignPrivateIpAddresses",
@@ -49,98 +48,66 @@
         "ec2:DescribeInstanceTypes",
         "ec2:DescribeSubnets",
         "ec2:DetachNetworkInterface",
+        "ec2:DescribeDhcpOptions",
         "ec2:ModifyNetworkInterfaceAttribute",
         "ec2:UnassignPrivateIpAddresses",
         "ec2:CreateTags",
-        "ec2:DescribeInstances",
-        "ec2:DescribeInstanceTypes",
         "ec2:DescribeRouteTables",
         "ec2:DescribeSecurityGroups",
-        "ec2:DescribeSubnets",
         "ec2:DescribeVolumes",
         "ec2:DescribeVolumesModifications",
-        "ec2:DescribeVpcs",
-        "ec2:CreateVpcEndpointServiceConfiguration",
-        "ec2:DeleteVpcEndpointServiceConfigurations",
-        "ec2:DescribeVpcEndpointServiceConfigurations",
-        "ec2:ModifyVpcEndpointServicePermissions"
+        "ec2:DescribeVpcs"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "EKSAuthAccess",
       "Effect": "Allow",
       "Action": [
-        "eks-auth:AssumeRoleForPodIdentity"
-      ],
-      "Resource": [
-        "*"
-      ]
-    },
-    {
-      "Sid": "EKSAccess",
-      "Effect": "Allow",
-      "Action": [
-        "eks:AssociateAccessPolicy",
         "eks:Describe*",
         "eks:List*",
-        "eks:AccessKubernetesApi"
+        "eks:AssociateAccessPolicy",
+        "eks:AccessKubernetesApi",
+        "eks-auth:AssumeRoleForPodIdentity"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "ApiGatewayAccess",
       "Effect": "Allow",
       "Action": [
-        "apigateway:POST",
-        "apigateway:GET",
-        "apigateway:PUT",
-        "apigateway:PATCH",
-        "apigateway:DELETE",
-        "apigateway:UpdateRestApiPolicy"
+        "elasticloadbalancing:Create*",
+        "elasticloadbalancing:Describe*"
       ],
-      "Resource": [
-        "arn:aws:apigateway:*::/vpclinks",
-        "arn:aws:apigateway:*::/vpclinks/*",
-        "arn:aws:apigateway:*::/restapis",
-        "arn:aws:apigateway:*::/restapis/*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "ElasticLoadBalancingAccess",
       "Effect": "Allow",
       "Action": [
-        "elasticloadbalancing:CreateLoadBalancer",
-        "elasticloadbalancing:DescribeLoadBalancers",
-        "elasticloadbalancing:DescribeLoadBalancerAttributes",
-        "elasticloadbalancing:DescribeListeners",
-        "elasticloadbalancing:DescribeListenerCertificates",
-        "elasticloadbalancing:DescribeSSLPolicies",
-        "elasticloadbalancing:DescribeRules",
-        "elasticloadbalancing:DescribeTargetGroups",
-        "elasticloadbalancing:DescribeTargetGroupAttributes",
-        "elasticloadbalancing:DescribeTargetHealth",
-        "elasticloadbalancing:DescribeTags",
-        "elasticloadbalancing:DescribeTrustStores",
-        "elasticloadbalancing:DescribeListenerAttributes"
+        "sagemaker:CreateModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:ListModels",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:ListTags",
+        "sagemaker:EnableClusterInference",
+        "sagemaker:DescribeClusterInference",
+        "sagemaker:DescribeHubContent",
+        "sagemaker:AddTags"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "SageMakerAccess",
       "Effect": "Allow",
       "Action": [
-        "sagemaker:*"
+        "acm:ImportCertificate",
+        "acm:DeleteCertificate"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
     },
     {
       "Sid": "AllowPassRoleToSageMaker",
@@ -148,7 +115,7 @@
       "Action": [
         "iam:PassRole"
       ],
-      "Resource": "arn:aws:iam::*:role/*",
+      "Resource": "*",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": "sagemaker.amazonaws.com"
@@ -156,15 +123,24 @@
       }
     },
     {
-      "Sid": "AcmAccess",
+      "Sid": "CloudWatchEMFPermissions",
       "Effect": "Allow",
       "Action": [
-        "acm:ImportCertificate",
-        "acm:DeleteCertificate"
+        "cloudwatch:PutMetricData",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups",
+        "logs:CreateLogStream",
+        "logs:CreateLogGroup"
       ],
-      "Resource": [
-        "*"
-      ]
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "fsx:DescribeFileSystems"
+      ],
+      "Resource": "*"
     }
   ]
 }
