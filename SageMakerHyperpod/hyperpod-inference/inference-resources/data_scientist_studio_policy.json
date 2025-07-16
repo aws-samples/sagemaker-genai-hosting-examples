@@ -1,0 +1,65 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "DescribeHyerpodClusterPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "sagemaker:DescribeCluster"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "ec2:Describe*",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:CompleteLayerUpload",
+                "ecr:GetAuthorizationToken",
+                "ecr:UploadLayerPart",
+                "ecr:InitiateLayerUpload",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:PutImage"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "cloudwatch:PutMetricData",
+                "cloudwatch:GetMetricData"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "UseEksClusterPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "eks:DescribeCluster",
+                "eks:AccessKubernetesApi",
+                "eks:MutateViaKubernetesAPI",
+                "eks:DescribeAddon"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ListClustersPermission",
+            "Effect": "Allow",
+            "Action": [
+                "sagemaker:ListClusters"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:StartSession",
+                "ssm:TerminateSession"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
