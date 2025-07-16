@@ -93,6 +93,24 @@
       ]
     },
     {
+      "Sid": "ApiGatewayAccess",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:POST",
+        "apigateway:GET",
+        "apigateway:PUT",
+        "apigateway:PATCH",
+        "apigateway:DELETE",
+        "apigateway:UpdateRestApiPolicy"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:*::/vpclinks",
+        "arn:aws:apigateway:*::/vpclinks/*",
+        "arn:aws:apigateway:*::/restapis",
+        "arn:aws:apigateway:*::/restapis/*"
+      ]
+    },
+    {
       "Sid": "ElasticLoadBalancingAccess",
       "Effect": "Allow",
       "Action": [
@@ -119,16 +137,6 @@
       "Effect": "Allow",
       "Action": [
         "sagemaker:*"
-      ],
-      "Resource": [
-        "*"
-      ]
-    },
-    {
-      "Sid": "BedrockAccess",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:*"
       ],
       "Resource": [
         "*"
