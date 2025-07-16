@@ -97,6 +97,8 @@
         "sagemaker:EnableClusterInference",
         "sagemaker:DescribeClusterInference",
         "sagemaker:DescribeHubContent",
+        "sagemaker:UpdateClusterInference",
+        "sagemaker:DescribeCluster",
         "sagemaker:AddTags"
       ],
       "Resource": "*"
