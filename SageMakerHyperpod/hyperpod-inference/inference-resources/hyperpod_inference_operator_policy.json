@@ -56,7 +56,8 @@
         "ec2:DescribeSecurityGroups",
         "ec2:DescribeVolumes",
         "ec2:DescribeVolumesModifications",
-        "ec2:DescribeVpcs"
+        "ec2:DescribeVpcs",
+        "ec2:CreateNetworkInterfacePermission"
       ],
       "Resource": "*"
     },
