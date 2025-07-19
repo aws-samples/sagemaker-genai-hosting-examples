@@ -18,8 +18,6 @@ spec:
     - name: SAMPLE_ENV_VAR
       value: "sample_value"
   maxDeployTimeInSeconds: 1800
-  tlsConfig:
-    tlsCertificateOutputS3Uri: "s3://bucket-name/certificates"
   autoScalingSpec:
     cloudWatchTrigger:
       name: "SageMaker-Invocations"

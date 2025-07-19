@@ -59,5 +59,3 @@ spec:
         value: "20"
       - name: SAGEMAKER_ENV
         value: "1"
-  tlsConfig:
-    tlsCertificateOutputS3Uri: "s3://bucket-name/certificates"
