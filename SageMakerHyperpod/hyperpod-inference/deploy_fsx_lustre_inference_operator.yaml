@@ -13,8 +13,6 @@ spec:
       fileSystemId: fs-1234abcd
     modelLocation: deepseek-1-5b
     modelSourceType: fsx
-  tlsConfig:
-    tlsCertificateOutputS3Uri: s3://<bucket-name>/certificates/
   worker:
     environmentVariables:
     - name: HF_MODEL_ID
