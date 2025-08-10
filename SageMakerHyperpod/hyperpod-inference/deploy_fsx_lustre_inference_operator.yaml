@@ -1,0 +1,41 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1alpha1
+kind: InferenceEndpointConfig
+metadata:
+  name: deepseek15b-fsx
+  namespace: default
+spec:
+  endpointName: deepseek15b-fsx
+  instanceType: ml.g5.8xlarge
+  invocationEndpoint: invocations
+  modelName: deepseek15b
+  modelSourceConfig:
+    fsxStorage:
+      fileSystemId: fs-1234abcd
+    modelLocation: deepseek-1-5b
+    modelSourceType: fsx
+  worker:
+    environmentVariables:
+    - name: HF_MODEL_ID
+      value: /opt/ml/model
+    - name: SAGEMAKER_PROGRAM
+      value: inference.py
+    - name: SAGEMAKER_SUBMIT_DIRECTORY
+      value: /opt/ml/model/code
+    - name: MODEL_CACHE_ROOT
+      value: /opt/ml/model
+    - name: SAGEMAKER_ENV
+      value: '1'
+    image: 763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-tgi-inference:2.4.0-tgi2.3.1-gpu-py311-cu124-ubuntu22.04-v2.0
+    modelInvocationPort:
+      containerPort: 8080
+      name: http
+    modelVolumeMount:
+      mountPath: /opt/ml/model
+      name: model-weights
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+      requests:
+        cpu: 30000m
+        memory: 100Gi
+        nvidia.com/gpu: 1

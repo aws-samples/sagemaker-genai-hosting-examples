@@ -1,0 +1,149 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:GetRepositoryPolicy",
+        "ecr:DescribeRepositories",
+        "ecr:ListImages",
+        "ecr:DescribeImages",
+        "ecr:BatchGetImage",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetLifecyclePolicyPreview",
+        "ecr:ListTagsForResource",
+        "ecr:DescribeImageScanFindings"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AssignPrivateIpAddresses",
+        "ec2:AttachNetworkInterface",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeInstances",
+        "ec2:DescribeTags",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeSubnets",
+        "ec2:DetachNetworkInterface",
+        "ec2:DescribeDhcpOptions",
+        "ec2:ModifyNetworkInterfaceAttribute",
+        "ec2:UnassignPrivateIpAddresses",
+        "ec2:CreateTags",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeVolumesModifications",
+        "ec2:DescribeVpcs",
+        "ec2:CreateNetworkInterfacePermission"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "eks:Describe*",
+        "eks:List*",
+        "eks:AssociateAccessPolicy",
+        "eks:AccessKubernetesApi",
+        "eks-auth:AssumeRoleForPodIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:Create*",
+        "elasticloadbalancing:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CreateModel",
+        "sagemaker:DescribeModel",
+        "sagemaker:DeleteModel",
+        "sagemaker:ListModels",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:DescribeEndpointConfig",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:DeleteEndpoint",
+        "sagemaker:DescribeEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:ListTags",
+        "sagemaker:EnableClusterInference",
+        "sagemaker:DescribeClusterInference",
+        "sagemaker:DescribeHubContent",
+        "sagemaker:UpdateClusterInference",
+        "sagemaker:DescribeCluster",
+        "sagemaker:AddTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "acm:ImportCertificate",
+        "acm:DeleteCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowPassRoleToSageMaker",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "sagemaker.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "CloudWatchEMFPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups",
+        "logs:CreateLogStream",
+        "logs:CreateLogGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "fsx:DescribeFileSystems"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
