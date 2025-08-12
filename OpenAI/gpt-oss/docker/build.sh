@@ -5,7 +5,7 @@ export TAG=v0.10.0-gpt-oss
 
 full_name="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPOSITORY_NAME}:${TAG}"
 
-DOCKER_BUILDKIT=1 docker build . --tag $REPOSITORY_NAME:$TAG --file Dockerfile.gptoss
+DOCKER_BUILDKIT=1 docker build . --tag $REPOSITORY_NAME:$TAG --file Dockerfile
 
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
