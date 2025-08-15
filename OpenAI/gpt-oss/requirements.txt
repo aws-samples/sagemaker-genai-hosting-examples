@@ -1,0 +1,12 @@
+bedrock-agentcore
+#bedrock-agentcore-starter-toolkit
+bedrock-agentcore-starter-toolkit==0.1.1
+uv
+langchain[aws]
+langgraph
+langsmith[otel]
+duckduckgo-search 
+langchain-community
+opentelemetry-instrumentation-langchain
+starlette
+uvicorn
