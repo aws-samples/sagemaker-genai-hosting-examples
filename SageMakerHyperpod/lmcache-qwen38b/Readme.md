@@ -5,11 +5,11 @@ Apply the manifest file
 
 kubectl apply -f lmcache-qwen-8b.yaml 
 
-# check teh status of the pod and get pod ip
+# check the status of the pod and get pod ip
 kubectl get pods -o wide 
 
 
-# Once deployed, you can spin up a curl pod to run sampel inference requests 
+# Once deployed, you can spin up a curl pod to run sample inference requests 
 
 kubectl run curl-test \                                                                   
   --image=curlimages/curl:latest \
@@ -19,7 +19,7 @@ kubectl run curl-test \
 
 
 
-# Run sampel requests(replace pod-ip with teh ip adress of the pod) 
+# Run sample requests(replace pod-ip with the ip adress of the pod) 
 curl http://pod-ip:8000/v1/completions \
 -H "Content-Type: application/json" \
 -d "{
@@ -35,7 +35,7 @@ curl http://pod-ip:8000/v1/completions \
 
 kubectl logs -f podname  | grep -i "lmcache\|cache hit\|storing"
 
-# Sample output 
+# Sample output that shows cache hit rate when using similar prompts
 
 INFO 08-18 21:45:50 [loggers.py:122] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.1%, Prefix cache hit rate: 54.2%
 [2025-08-18 21:49:46,163] LMCache INFO: Reqid: cmpl-1a7d41feffce420ba19525d93a33d165-0, Total tokens 51, LMCache hit tokens: 51, need to load: 2 (vllm_v1_adapter.py:803:lmcache.integration.vllm.vllm_v1_adapter)
