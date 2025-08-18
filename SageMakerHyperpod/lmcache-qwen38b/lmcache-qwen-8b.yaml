@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen3-8b
+  namespace: default
+  labels:
+    app: qwen3-8b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qwen3-8b
+  template:
+    metadata:
+      labels:
+        app: qwen3-8b
+    spec:
+      nodeSelector:
+        node.kubernetes.io/instance-type: "ml.g5.4xlarge"
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      volumes:
+      - name: cache-volume
+        hostPath:
+          path: /opt/dlami/nvme/huggingface-cache
+          type: DirectoryOrCreate
+      - name: lmcache-config
+        configMap:
+          name: lmcache-inmemory-config
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "16Gi"
+      containers:
+      - name: qwen3-8b
+        image: lmcache/vllm-openai
+        command: ["/opt/venv/bin/vllm", "serve"]
+        args: 
+        - deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+        - --enable-prefix-caching
+        - --max-model-len
+        - "8192"
+        - --kv-transfer-config
+        - '{"kv_connector":"LMCacheConnectorV1", "kv_role":"kv_both"}'
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        - name: LMCACHE_USE_EXPERIMENTAL
+          value: "True"
+        - name: LMCACHE_CONFIG_FILE
+          value: "/lmcache-config/lmcache_config.yaml"
+        - name: VLLM_ALLOW_LONG_MAX_MODEL_LEN
+          value: "1"
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+          requests:
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - mountPath: /root/.cache/huggingface
+          name: cache-volume
+        - name: shm
+          mountPath: /dev/shm
+        - name: lmcache-config
+          mountPath: /lmcache-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 300
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 300
+          periodSeconds: 15
+---
+apiVersion: v1 
+kind: ConfigMap 
+metadata:
+  name: lmcache-inmemory-config
+data:
+  lmcache_config.yaml: |
+    # LMCache CPU-only configuration
+    chunk_size: 256
+    
+    # CPU memory configuration  
+    local_cpu: true
+    max_local_cpu_size: 5.0
+    
+    # Disk cache disabled
+    local_disk: null
+    max_local_disk_size: 0
+    
+    # Remote storage disabled
+    remote_url: null
+    remote_serde: "naive"
+    
+    # Cache behavior settings
+    save_decode_cache: true
+    error_handling: true
+    
+    # Blending disabled
+    enable_blending: false
+    blend_recompute_ratio: 0.15
+    blend_min_tokens: 256
+    
+    # P2P and controller disabled
+    enable_p2p: false
+    enable_controller: false
+    lmcache_instance_id: "lmcache_default_instance"
