@@ -1,7 +1,7 @@
 export REGION=YOUR_REGION
 export ACCOUNT_ID=YOUR_ACCOUNT_ID
 export REPOSITORY_NAME=vllm
-export TAG=v0.10.0-gpt-oss
+export TAG=v0.10.1
 
 full_name="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPOSITORY_NAME}:${TAG}"
 
