@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpt-oss
+  namespace: default
+  labels:
+    app: gpt-oss
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpt-oss
+  template:
+    metadata:
+      labels:
+        app: gpt-oss
+    spec:
+      nodeSelector:
+        node.kubernetes.io/instance-type: "ml.g6e.xlarge"
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      volumes:
+      - name: cache-volume
+        hostPath:
+          path: /opt/dlami/nvme/huggingface-cache
+          type: DirectoryOrCreate
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "64Gi"
+      containers:
+      - name: gpt-oss
+        image: vllm/vllm-openai:gptoss
+        command: ["/bin/sh", "-c"]
+        args: [
+          "VLLM_ATTENTION_BACKEND=TRITON_ATTN_VLLM_V1 vllm serve openai/gpt-oss-20b --trust-remote-code --async-scheduling"
+        ]
+        env:
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+        - name: VLLM_ATTENTION_BACKEND
+          value: "TRITON_ATTN_VLLM_V1"
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+          requests:
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - mountPath: /root/.cache/huggingface
+          name: cache-volume
+        - name: shm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 900
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 600
+          periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpt-oss-service
+  labels:
+    app: gpt-oss
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+spec:
+  selector:
+    app: gpt-oss
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
