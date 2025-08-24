@@ -65,7 +65,7 @@ def cleanup_workshop_resources(model_name, endpoint_config_name, endpoint_name, 
         print(f"✅ Deleted endpoint: {endpoint_name}")
         
         # Delete endpoint configuration
-        sagemaker_client.delete_endpoint_config(EndpointConfigurationName=endpoint_config_name)
+        sagemaker_client.delete_endpoint_config(EndpointConfigName=endpoint_config_name)
         print(f"✅ Deleted endpoint configuration: {endpoint_config_name}")
 
         # Delete model
