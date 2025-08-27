@@ -1,5 +1,5 @@
 
-## title
+## Title
 Lab 4b: Deploying with Whisper ASR on SageMaker
 
 ## Introduction
