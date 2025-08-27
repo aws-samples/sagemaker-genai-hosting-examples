@@ -1,7 +1,6 @@
----
-title: "Lab 4b: Deploying with Whisper ASR on SageMaker"
-weight: 33
----
+
+## title
+Lab 4b: Deploying with Whisper ASR on SageMaker
 
 ## Introduction
 In this hands-on lab, we'll explore deploying production-ready Automatic Speech Recognition (ASR) models using Amazon SageMaker's HuggingFace PyTorch container. We'll implement  OpenAI's Whisper ASR model as distinct endpoints. Using SageMaker's flexible serving infrastructure, we'll demonstrate how to handle image tasks through our vision endpoint and audio transcription through our Whisper ASR endpoint. This lab focuses on practical implementation aspects, from model artifact organization to creating robust inference pipelines that can handle real-world deployment scenarios for each model type.
@@ -19,7 +18,7 @@ Accelerate is a library that makes distributed training and inference using PyTo
 ## Let's Build
 To start learning under lab 4b you would be seeing jupyter files 
 - deploy_whisper_minimal.ipynb: Use this file to run the LMI container with Accelerate library to shard the model using ml.g5.2xlarge instance
-- deploy_whisper.ipynb: Use this file to run the LMI container with Accelerate library to shard the model using ml.g5.2xlarge instance
+- deploy_whisper.ipynb: Use this file to run the LMI container with Accelerate library to shard the model using ml.g5.2xlarge or  ml.g5.12xlarge instance
 
 ## Additional Reading Section
 [Resources for using Hugging Face with Amazon SageMaker AI](https://docs.aws.amazon.com/sagemaker/latest/dg/hugging-face.html)
