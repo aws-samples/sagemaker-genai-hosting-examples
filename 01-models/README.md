@@ -19,6 +19,7 @@ model-provider -> model name -> code examples
 - [Gemma3](../Gemma3/)
 - [Llama4](../Llama4/)
 - [Llama3.3](../Llama3.3/)
+- [Swiss AI Initiative Apertus](./Swiss-AI/Apertus/)
 
 ### 2024 and before
 - [Mistral](../Mistral/)
