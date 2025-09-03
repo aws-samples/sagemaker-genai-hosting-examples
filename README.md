@@ -16,6 +16,7 @@ If you are contributing, please add a link to your model below:
 - [Zephyr](./Zephyr/)
 - [CodeGen](./Codegen25/)
 - [CodeLlama](./CodeLlama/)
+- [Swiss AI Initiative Apertus](./01-models/Swiss-AI/Apertus/)
 
 ## Additional Resources
 
