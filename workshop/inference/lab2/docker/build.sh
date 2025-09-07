@@ -5,7 +5,7 @@ export TAG=v0.10.1
 
 full_name="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPOSITORY_NAME}:${TAG}"
 
-DOCKER_BUILDKIT=1 docker build . --tag $REPOSITORY_NAME:$TAG --file Dockerfile
+docker build . --tag $REPOSITORY_NAME:$TAG --file Dockerfile --network sagemaker
 
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
