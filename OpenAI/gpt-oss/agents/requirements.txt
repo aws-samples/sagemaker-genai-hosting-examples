@@ -1,5 +1,4 @@
 bedrock-agentcore
-#bedrock-agentcore-starter-toolkit
 bedrock-agentcore-starter-toolkit==0.1.1
 uv
 langchain[aws]
@@ -10,3 +9,14 @@ langchain-community
 opentelemetry-instrumentation-langchain
 starlette
 uvicorn
+boto3
+botocore
+yfinance
+pandas
+numpy
+requests
+reportlab
+matplotlib
+seaborn
+python-dateutil
+pytz
