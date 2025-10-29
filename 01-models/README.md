@@ -13,7 +13,7 @@ model-provider -> model name -> code examples
 
 ### 2025
 - [GLM-4.5](./Z.ai/GLM-4.5/)
-- [gpt-oss](../OpenAI/deploy/)
+- [gpt-oss](./openai/gpt-oss/)
 - [Qwen](../Qwen/)
 - [DeepSeek](../Deepseek/)
 - [Gemma3](../Gemma3/)
