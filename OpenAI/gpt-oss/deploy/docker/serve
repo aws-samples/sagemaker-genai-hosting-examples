@@ -6,7 +6,8 @@ ARG_PREFIX="--"
 
 # Initialize an array for storing the arguments
 # port 8080 required by sagemaker, https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-inference-code.html#your-algorithms-inference-code-container-response
-ARGS=(--port 8080)
+# Enable tool calls and parse reasoning responses by default
+ARGS=(--tool-call-parser openai --enable-auto-tool-choice --reasoning-parser openai_gptoss --port 8080)
 
 # Loop through all environment variables
 while IFS='=' read -r key value; do
