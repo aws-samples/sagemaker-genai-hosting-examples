@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo "Starting server"
+
+SERVER_ARGS=(--host 0.0.0.0 --port 8080)
+
+# Define the prefix for environment variables to look for
+PREFIX="OPTION_"
+ARG_PREFIX="--"
+
+# Loop through all environment variables
+while IFS='=' read -r key value; do
+    # Remove the prefix from the key, convert to lowercase, and replace underscores with dashes
+    arg_name=$(echo "${key#"${PREFIX}"}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+    # Add the argument name and value to the ARGS array
+    SERVER_ARGS+=("${ARG_PREFIX}${arg_name}")
+    if [ -n "$value" ]; then
+        SERVER_ARGS+=("$value")
+    fi
+done < <(env | grep "^${PREFIX}")
+
+echo "-------------------------------------------------------------------"
+echo "SGLang engine args: [${SERVER_ARGS[@]}]"
+echo "-------------------------------------------------------------------"
+
+# Pass the collected arguments to the main entrypoint
+exec python3 -m sglang.launch_server "${SERVER_ARGS[@]}"
