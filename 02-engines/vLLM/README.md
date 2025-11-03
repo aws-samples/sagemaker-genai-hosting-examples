@@ -26,6 +26,9 @@ vLLM is flexible and easy to use with:
 - Prefix caching support
 - Multi-LoRA support
 
+## List of examples
+- [byoc](./byoc): Demonstrates how to run arbitrary models with vLLM on an Amazon SageMaker AI Inference Endpoint
+
 ## Additional resources
 - vLLM [documentation](https://docs.vllm.ai/en/latest/)
 - Official GitHub [repo](https://github.com/vllm-project/vllm)
