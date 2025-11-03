@@ -18,7 +18,7 @@ SGLang is a high-performance serving framework for large language models and vis
 - Inference examples using SGLang container for various models are in [examples](./examples)
 
 ## How to prepare SGLang container for SageMaker deployment
-- If you are using EC2 instance please copy `Dockerfile`, `serve` and `build.sh` to the EC2 instance and run `build.sh`. These scripts were tested on `ml.g6e.4xlarge` instance with `Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4.1 (Ubuntu 22.04) 20240925` AMI.
+- If you are using EC2 instance please copy `Dockerfile`, `serve` and `build-ec2.sh` to the EC2 instance and run `build-ec2.sh`. These scripts were tested on `ml.g6e.4xlarge` instance with `Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4.1 (Ubuntu 22.04) 20240925` AMI.
 - if you are using Amazon SageMaker AI Studio please clone the repo to the Studin environment and then run `studio_build.ipynb`
 
 

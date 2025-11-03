@@ -2,8 +2,6 @@
 
 # Build and Push Custom SGLang Container to Amazon ECR
 
-# This script is for SageMaker AI Studio environment
-
 set -e
 
 # Configuration
@@ -29,7 +27,7 @@ aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS 
 
 # Step 3: Build the Docker image
 echo "🔨 Building Docker image for SQLang..."
-docker build . --tag ${REPOSITORY_NAME}:${TAG} --file Dockerfile --build-arg BASE_IMAGE=lmsysorg/sglang:${SRC_TAG} --network sagemaker
+DOCKER_BUILDKIT=1 docker build . --tag ${REPOSITORY_NAME}:${TAG} --file Dockerfile --build-arg BASE_IMAGE=lmsysorg/sglang:${SRC_TAG}
 
 # Step 4: Tag the image for ECR
 echo "🏷️   Tagging image for ECR..."
@@ -44,5 +42,14 @@ echo "Image URI: ${IMAGE_URI}"
 echo ""
 echo "You can now use this image URI in your SageMaker deployment:"
 echo "image_uri = \"${IMAGE_URI}\""
+
+# Optional: Clean up local images to save space
+read -p "🗑️   Clean up local Docker images? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "🧹 Cleaning up local images..."
+    docker rmi ${REPOSITORY_NAME}:${TAG} ${IMAGE_URI}
+    echo "Local images cleaned up"
+fi
 
 echo "🎉 Build and push completed successfully!"
