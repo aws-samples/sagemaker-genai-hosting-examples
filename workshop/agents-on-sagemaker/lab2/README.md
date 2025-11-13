@@ -14,7 +14,7 @@ User Query → Bedrock Agent Core → Internet Search → Qwen Analysis → MCP 
 2. **Internet Search Tool**: Real-time information gathering
 3. **Qwen Model Integration**: AI-powered analysis via SageMaker endpoints
 4. **MCP Gateway**: Secure Lambda function orchestration
-5. **PDF Generation Lambda**: Structured report creation
+5. **Markdown Generation Lambda**: Structured report creation
 6. **S3 Storage**: Persistent report storage
 
 
@@ -35,28 +35,22 @@ User Query → Bedrock Agent Core → Internet Search → Qwen Analysis → MCP 
 | SDK used             | boto3, bedrock-agentcore-starter-toolkit                 |
 
 ## Prerequisites
-
 - SageMaker Studio environment
 - AWS CLI configured with appropriate permissions
 - Python 3.8+ environment
 - Qwen model deployed on SageMaker endpoint
 - Docker support in SageMaker Studio
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Support
-
-- 📖 **Documentation**: See `Bedrock_Agent_Core_Complete_Guide.ipynb`
+- 📖 **Documentation**: see [Amazon SageMaker AI](https://docs.aws.amazon.com/sagemaker/) and [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/)
 - 🐛 **Issues**: Open GitHub issue with detailed description
 - 💬 **Discussions**: Use GitHub Discussions for questions
 
 ## Acknowledgments
-
-- AWS Bedrock Agent Core team for the deployment framework
+- Amazon SageMaker team for endpoint infrastructure
 - Qwen model developers for the language model
-- AWS SageMaker team for endpoint infrastructure
+- Amazon Bedrock Agent Core team for the deployment framework
 
 ---
 
