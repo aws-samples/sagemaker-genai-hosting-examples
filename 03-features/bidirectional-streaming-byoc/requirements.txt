@@ -1,0 +1,3 @@
+# Requirements for SageMaker Bidirectional Streaming
+boto3
+aws_sdk_sagemaker_runtime_http2==0.1.0
