@@ -42,7 +42,7 @@ You must deploy a Deepgram model on SageMaker before using this demo:
 
 3. **For detailed deployment instructions**, see:
    - [Deepgram SageMaker Documentation](https://developers.deepgram.com/docs/deploy-amazon-sagemaker)
-   - Upcoming AWS blog post: "Introducing bidirectional streaming for real-time inference on Amazon SageMaker AI" (Link to be updated after publication)
+   - [Introducing bidirectional streaming for real-time inference on Amazon SageMaker AI](https://aws.amazon.com/blogs/machine-learning/introducing-bidirectional-streaming-for-real-time-inference-on-amazon-sagemaker-ai/)
 
 ### Python Requirements
 - Python 3.8 or higher
