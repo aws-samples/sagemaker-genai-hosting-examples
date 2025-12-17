@@ -26,6 +26,16 @@ vLLM is flexible and easy to use with:
 - Prefix caching support
 - Multi-LoRA support
 
+## Official vLLM Container
+
+SageMaker has contributed to vLLM directly, enabling the vLLM image to support SageMaker features out of the box including LoRA, sticky routing, pre/post processing, and more. Checkout our examples and docs from our [model-hosting-container-standards](https://github.com/aws/model-hosting-container-standards) repo.
+
+### Quickstart
+- [SageMaker vLLM Quickstart Guide](https://github.com/aws/model-hosting-container-standards/blob/main/docs/sagemaker/01_quickstart.md)
+
+### Notebooks
+- [SageMaker vLLM Notebooks](https://github.com/aws/model-hosting-container-standards/tree/main/examples/vllm/notebooks)
+
 ## List of examples
 - [byoc](./byoc): Demonstrates how to run arbitrary models with vLLM on an Amazon SageMaker AI Inference Endpoint
 
