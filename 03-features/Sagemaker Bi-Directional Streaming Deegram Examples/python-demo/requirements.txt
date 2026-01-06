@@ -1,0 +1,2 @@
+boto3
+aws_sdk_sagemaker_runtime_http2
