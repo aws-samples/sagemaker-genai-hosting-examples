@@ -1,0 +1,6 @@
+boto3
+botocore
+strands-agents
+strands-agents-tools
+mypy_boto3_sagemaker_runtime
+openai
