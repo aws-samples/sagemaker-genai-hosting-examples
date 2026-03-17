@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
 SageMaker ↔ vLLM Realtime WebSocket Bridge.
-Based on the SageMaker Bidi streaming echo server pattern.
+
+Routes /invocations-bidirectional-stream → /v1/realtime.
+
+With UTF8 DataType on the client, SageMaker sends native text frames
+and the bridge passes them through directly. Falls back to bytes→text
+decoding for non-UTF8 clients.
+
+vLLM sends text frames back → bridge forwards as text → SageMaker
+sets DataType=UTF8 on the response PayloadPart.
 """
 
-import sys
 import json
 import asyncio
 import logging
@@ -25,7 +32,7 @@ VLLM_HEALTH_URL = "http://localhost:8081/health"
 
 
 # ──────────────────────────────────────────────
-# SageMaker contract endpoints
+# SageMaker health check
 # ──────────────────────────────────────────────
 
 @app.get("/ping")
@@ -40,14 +47,25 @@ async def ping():
                 status_code=resp.status_code,
             )
     except Exception:
-        return JSONResponse(content={"status": "unhealthy"}, status_code=503)
+        return JSONResponse(
+            content={"status": "unhealthy"}, status_code=503
+        )
 
 
 # ──────────────────────────────────────────────
-# Bidirectional streaming: SageMaker ↔ vLLM
+# WebSocket bridge
 # ──────────────────────────────────────────────
+
 @app.websocket("/invocations-bidirectional-stream")
 async def websocket_bridge(sm_ws: WebSocket):
+    """
+    Accept SageMaker's WebSocket on /invocations-bidirectional-stream,
+    connect to vLLM's /v1/realtime, and bridge messages both directions.
+
+    Frame handling:
+      SM → vLLM: text frames pass through; binary decoded to text (fallback)
+      vLLM → SM: text frames pass through (SageMaker marks as UTF8)
+    """
     await sm_ws.accept()
     logger.info("SageMaker WebSocket connected")
 
@@ -56,31 +74,18 @@ async def websocket_bridge(sm_ws: WebSocket):
             logger.info("Connected to vLLM /v1/realtime")
 
             async def sm_to_vllm():
-                """Forward: SageMaker → vLLM
-
-                SageMaker bidi streaming sends everything as binary
-                WebSocket frames. vLLM expects text frames (JSON).
-                We decode bytes → str so websockets sends text frames.
-                """
+                """Forward: SageMaker → vLLM"""
                 try:
                     while True:
                         message = await sm_ws.receive()
 
                         if message["type"] == "websocket.receive":
                             if "text" in message and message["text"]:
-                                logger.debug(
-                                    f"SM → vLLM (text): "
-                                    f"{message['text'][:100]}"
-                                )
+                                # UTF8 client → native text frame
                                 await vllm_ws.send(message["text"])
-
                             elif "bytes" in message and message["bytes"]:
-                                # Decode bytes to str so websockets sends a TEXT frame, which is what vLLM expects
+                                # Non-UTF8 fallback → decode to text
                                 text = message["bytes"].decode("utf-8")
-                                logger.debug(
-                                    f"SM → vLLM (bytes→text): "
-                                    f"{text[:100]}"
-                                )
                                 await vllm_ws.send(text)
 
                         elif message["type"] == "websocket.disconnect":
@@ -93,23 +98,13 @@ async def websocket_bridge(sm_ws: WebSocket):
                     logger.error(f"SM → vLLM error: {e}")
 
             async def vllm_to_sm():
-                """Forward: vLLM → SageMaker
-
-                vLLM sends text frames (JSON). SageMaker bidi streaming
-                expects bytes. We encode str → bytes for SageMaker.
-                """
+                """Forward: vLLM → SageMaker"""
                 try:
                     async for msg in vllm_ws:
                         if isinstance(msg, str):
-                            logger.debug(
-                                f"vLLM → SM (text→bytes): {msg[:100]}"
-                            )
-                            # Send as bytes for SageMaker HTTP/2
-                            await sm_ws.send_bytes(msg.encode("utf-8"))
+                            # Text → text (SageMaker sets DataType=UTF8)
+                            await sm_ws.send_text(msg)
                         elif isinstance(msg, bytes):
-                            logger.debug(
-                                f"vLLM → SM (bytes): {len(msg)} bytes"
-                            )
                             await sm_ws.send_bytes(msg)
 
                 except websockets.ConnectionClosed as e:
@@ -134,10 +129,10 @@ async def websocket_bridge(sm_ws: WebSocket):
 
     except websockets.InvalidStatusCode as e:
         logger.error(f"vLLM rejected WebSocket: {e.status_code}")
-        await sm_ws.send_bytes(json.dumps({
+        await sm_ws.send_text(json.dumps({
             "type": "error",
             "error": f"vLLM connection failed: {e.status_code}",
-        }).encode("utf-8"))
+        }))
     except Exception as e:
         logger.error(f"Bridge error: {e}", exc_info=True)
     finally:

@@ -3,7 +3,9 @@
 Gradio demo for real-time speech transcription using vLLM Realtime API
 via SageMaker Bidirectional Streaming.
 
-    python sagemaker_realtime_microphone_client.py \
+sends UTF8 text frames via DataType header.
+
+    python microphone_client.py \
         --endpoint-name YOUR_ENDPOINT_NAME \
         --region us-east-1
 
@@ -47,7 +49,7 @@ model_name = ""
 
 
 # ──────────────────────────────────────────────
-# SageMaker bidi streaming helpers
+# SageMaker helpers
 # ──────────────────────────────────────────────
 
 def refresh_credentials():
@@ -80,8 +82,12 @@ def create_client():
 
 
 async def send_event(stream, event_dict):
+    """Send a JSON event as a UTF8 text frame."""
     payload_bytes = json.dumps(event_dict).encode("utf-8")
-    payload = RequestPayloadPart(bytes_=payload_bytes)
+    payload = RequestPayloadPart(
+        bytes_=payload_bytes,
+        data_type="UTF8",  # SageMaker creates Text WebSocket frame
+    )
     event = RequestStreamEventPayloadPart(value=payload)
     await stream.input_stream.send(event)
 
@@ -102,7 +108,7 @@ async def streaming_handler():
     logger.info(f"Connecting to endpoint: {endpoint_name}")
     stream = await client.invoke_endpoint_with_bidirectional_stream(
         InvokeEndpointWithBidirectionalStreamInput(
-            endpoint_name=endpoint_name
+            endpoint_name=endpoint_name,
         )
     )
 
@@ -113,7 +119,7 @@ async def streaming_handler():
     session_ready = asyncio.Event()
     transcription_complete = asyncio.Event()
 
-    # ── Receive task: ──
+    # ── Receive task ──
     async def receive_loop():
         global transcription_text
         try:
@@ -136,7 +142,9 @@ async def streaming_handler():
                 msg_type = data.get("type", "unknown")
 
                 if msg_type == "session.created":
-                    logger.info(f"✓ Session created: {data.get('id')}")
+                    logger.info(
+                        f"✓ Session created: {data.get('id')}"
+                    )
                     session_ready.set()
 
                 elif msg_type == "transcription.delta":
@@ -160,14 +168,13 @@ async def streaming_handler():
         except Exception as e:
             logger.error(f"Receive error: {e}")
         finally:
-            # Unblock waiters in case of early exit
             session_ready.set()
             transcription_complete.set()
 
     # Start receiver FIRST — it handles session.created
     recv_task = asyncio.create_task(receive_loop())
 
-    # Wait for session (timeout on Python Event, NOT on CRT receive)
+    # Wait for session (timeout on Python Event, safe)
     await asyncio.wait_for(session_ready.wait(), timeout=15.0)
 
     # Configure session
@@ -201,7 +208,6 @@ async def streaming_handler():
     })
 
     # Wait for transcription to finish
-    # (timeout on Python Event, safe to cancel)
     try:
         await asyncio.wait_for(
             transcription_complete.wait(), timeout=30.0
@@ -209,7 +215,7 @@ async def streaming_handler():
     except asyncio.TimeoutError:
         logger.warning("Timed out waiting for final transcription")
 
-    # Cleanup — close input stream, which signals server to close output
+    # Cleanup — close input, let recv_task finish naturally
     try:
         await stream.input_stream.close()
     except Exception:
@@ -217,7 +223,9 @@ async def streaming_handler():
 
     if not recv_task.done():
         try:
-            await asyncio.wait_for(asyncio.shield(recv_task), timeout=5.0)
+            await asyncio.wait_for(
+                asyncio.shield(recv_task), timeout=5.0
+            )
         except asyncio.TimeoutError:
             pass
 
@@ -243,6 +251,7 @@ def start_recording():
     global transcription_text
     transcription_text = ""
 
+    # Drain leftover audio from previous session
     while not audio_queue.empty():
         try:
             audio_queue.get_nowait()
@@ -269,6 +278,7 @@ def stop_recording():
 
 
 def process_audio(audio):
+    """Process incoming microphone audio from Gradio."""
     global transcription_text
 
     if audio is None or not is_running:
@@ -276,14 +286,17 @@ def process_audio(audio):
 
     sample_rate, audio_data = audio
 
+    # Convert to mono if stereo
     if len(audio_data.shape) > 1:
         audio_data = audio_data.mean(axis=1)
 
+    # Normalize to float32
     if audio_data.dtype == np.int16:
         audio_float = audio_data.astype(np.float32) / 32767.0
     else:
         audio_float = audio_data.astype(np.float32)
 
+    # Resample to 16kHz if needed
     if sample_rate != SAMPLE_RATE:
         num_samples = int(len(audio_float) * SAMPLE_RATE / sample_rate)
         audio_float = np.interp(
@@ -292,6 +305,7 @@ def process_audio(audio):
             audio_float,
         )
 
+    # Convert to PCM16 and base64 encode
     pcm16 = (audio_float * 32767).astype(np.int16)
     b64_chunk = base64.b64encode(pcm16.tobytes()).decode("utf-8")
     audio_queue.put(b64_chunk)

@@ -2,9 +2,8 @@
 """
 SageMaker Bidirectional Streaming Client — vLLM Realtime API.
 Adapted from vLLM's [openai_realtime_client.py](https://docs.vllm.ai/en/latest/examples/online_serving/openai_realtime_client/?h=realtime#openai-realtime-client) for SageMaker HTTP/2.
-
+sends UTF8 text frames via DataType header.
 """
-
 import argparse
 import asyncio
 import base64
@@ -29,10 +28,8 @@ from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-AWS_REGION = "us-east-1"
-BIDI_ENDPOINT = f"https://runtime.sagemaker.{AWS_REGION}.amazonaws.com:8443"
-AUDIO_CHUNK_SIZE = 4096
 SAMPLE_RATE = 16_000
+AUDIO_CHUNK_SIZE = 4096
 
 
 def audio_to_pcm16_bytes(audio_path: str) -> bytes:
@@ -43,19 +40,16 @@ def audio_to_pcm16_bytes(audio_path: str) -> bytes:
 
 class SageMakerRealtimeClient:
     """
-    Translates vLLM WebSocket Realtime API protocol
-    over SageMaker HTTP/2 bidirectional streaming.
+    vLLM Realtime API client over SageMaker bidirectional streaming.
     """
 
-    def __init__(self, endpoint_name, region=AWS_REGION):
+    def __init__(self, endpoint_name, region):
         self.endpoint_name = endpoint_name
         self.region = region
         self.client = None
         self.stream = None
         self.recv_task = None
         self.is_active = False
-
-        # Coordination events (Python-level, safe to timeout on)
         self.session_ready = asyncio.Event()
         self.transcription_done = asyncio.Event()
 
@@ -74,8 +68,11 @@ class SageMakerRealtimeClient:
             f"Credentials refreshed (key ...{creds.access_key[-4:]})"
         )
 
+        bidi_endpoint = (
+            f"https://runtime.sagemaker.{self.region}.amazonaws.com:8443"
+        )
         config = Config(
-            endpoint_uri=BIDI_ENDPOINT,
+            endpoint_uri=bidi_endpoint,
             region=self.region,
             aws_credentials_identity_resolver=(
                 EnvironmentCredentialsResolver()
@@ -88,18 +85,18 @@ class SageMakerRealtimeClient:
         self.client = SageMakerRuntimeHTTP2Client(config=config)
 
     async def _send(self, event_dict: dict):
+        """Send a JSON message as a UTF8 text frame."""
         payload_bytes = json.dumps(event_dict).encode("utf-8")
-        payload = RequestPayloadPart(bytes_=payload_bytes)
+        payload = RequestPayloadPart(
+            bytes_=payload_bytes,
+            data_type="UTF8",  # SageMaker creates Text WebSocket frame
+        )
         event = RequestStreamEventPayloadPart(value=payload)
         await self.stream.input_stream.send(event)
 
-    # ──────────────────────────────────────────────
-    # Receive loop
-    # ──────────────────────────────────────────────
-
     async def _receive_loop(self):
         """
-        Process server responses.
+        Receive server responses.
         """
         try:
             output = await self.stream.await_output()
@@ -141,9 +138,7 @@ class SageMakerRealtimeClient:
                     break
 
                 elif msg_type == "error":
-                    logger.error(
-                        f"Server error: {data.get('error', data)}"
-                    )
+                    logger.error(f"Server error: {data}")
                     self.transcription_done.set()
                     break
 
@@ -153,13 +148,8 @@ class SageMakerRealtimeClient:
         except Exception as e:
             logger.error(f"Receive error: {e}")
         finally:
-            # Unblock waiters on early exit
             self.session_ready.set()
             self.transcription_done.set()
-
-    # ──────────────────────────────────────────────
-    # Session lifecycle
-    # ──────────────────────────────────────────────
 
     async def connect(self):
         if not self.client:
@@ -169,30 +159,22 @@ class SageMakerRealtimeClient:
         self.stream = (
             await self.client.invoke_endpoint_with_bidirectional_stream(
                 InvokeEndpointWithBidirectionalStreamInput(
-                    endpoint_name=self.endpoint_name
+                    endpoint_name=self.endpoint_name,
                 )
             )
         )
         self.is_active = True
-
-        # Start receiver — it handles session.created
         self.recv_task = asyncio.create_task(self._receive_loop())
-
-        # Wait for session (timeout on Python Event, safe)
-        await asyncio.wait_for(
-            self.session_ready.wait(), timeout=15.0
-        )
+        await asyncio.wait_for(self.session_ready.wait(), timeout=15.0)
 
     async def close(self):
         if not self.is_active:
             return
         self.is_active = False
-
         try:
             await self.stream.input_stream.close()
         except Exception:
             pass
-
         if self.recv_task and not self.recv_task.done():
             try:
                 await asyncio.wait_for(
@@ -200,70 +182,56 @@ class SageMakerRealtimeClient:
                 )
             except asyncio.TimeoutError:
                 pass
-
         logger.info("Connection closed")
 
-    # ──────────────────────────────────────────────
-    # Transcription
-    # ──────────────────────────────────────────────
-
     async def transcribe_audio(self, audio_path: str, model: str):
-            # 1. Set model
-            await self._send({"type": "session.update", "model": model})
+        """Transcribe audio file using vLLM Realtime API protocol."""
+        await self._send({"type": "session.update", "model": model})
+        await self._send({"type": "input_audio_buffer.commit"})
 
-            # 2. Signal ready
-            await self._send({"type": "input_audio_buffer.commit"})
+        logger.info(f"Loading audio: {audio_path}")
+        pcm_audio = audio_to_pcm16_bytes(audio_path)
+        total_chunks = (
+            (len(pcm_audio) + AUDIO_CHUNK_SIZE - 1) // AUDIO_CHUNK_SIZE
+        )
 
-            # 3. Send audio chunks at real-time pace
-            pcm_audio = audio_to_pcm16_bytes(audio_path)
-            total_chunks = (
-                (len(pcm_audio) + AUDIO_CHUNK_SIZE - 1) // AUDIO_CHUNK_SIZE
-            )
+        # Real-time pacing for true bidirectional streaming
+        bytes_per_sec = SAMPLE_RATE * 2  # 16-bit PCM
+        chunk_duration = AUDIO_CHUNK_SIZE / bytes_per_sec
 
-            # Calculate real-time delay per chunk:
-            # PCM16 @ 16kHz = 32,000 bytes/sec
-            # 4096 bytes/chunk = 0.128 sec of audio per chunk
-            bytes_per_sec = SAMPLE_RATE * 2  # 16-bit = 2 bytes per sample
-            chunk_duration = AUDIO_CHUNK_SIZE / bytes_per_sec
+        logger.info(
+            f"Streaming {total_chunks} chunks at real-time pace "
+            f"({len(pcm_audio) / bytes_per_sec:.1f}s of audio)"
+        )
 
-            logger.info(
-                f"Streaming {total_chunks} chunks at real-time pace "
-                f"({chunk_duration:.3f}s/chunk, "
-                f"{len(pcm_audio) / bytes_per_sec:.1f}s total audio)"
-            )
-
-            for idx, i in enumerate(
-                range(0, len(pcm_audio), AUDIO_CHUNK_SIZE)
-            ):
-                chunk = pcm_audio[i : i + AUDIO_CHUNK_SIZE]
-                await self._send({
-                    "type": "input_audio_buffer.append",
-                    "audio": base64.b64encode(chunk).decode("utf-8"),
-                })
-
-                # Log progress periodically
-                if idx % 50 == 0:
-                    elapsed_audio = idx * chunk_duration
-                    logger.info(
-                        f"  ▶ Sent chunk {idx}/{total_chunks} "
-                        f"({elapsed_audio:.1f}s of audio)"
-                    )
-
-                # Pace at real-time — this yields to the event loop,
-                # allowing _receive_loop to process incoming deltas
-                await asyncio.sleep(chunk_duration)
-
-            # 4. Final commit
+        for idx, i in enumerate(
+            range(0, len(pcm_audio), AUDIO_CHUNK_SIZE)
+        ):
+            chunk = pcm_audio[i : i + AUDIO_CHUNK_SIZE]
             await self._send({
-                "type": "input_audio_buffer.commit",
-                "final": True,
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(chunk).decode("utf-8"),
             })
-            logger.info("Audio fully sent. Waiting for final transcription...")
 
-            # 5. Wait for completion
-            await asyncio.wait_for(
-                self.transcription_done.wait(), timeout=60.0
-            )
+            if idx % 50 == 0 and idx > 0:
+                elapsed = idx * chunk_duration
+                logger.info(
+                    f"  ▶ Sent {idx}/{total_chunks} "
+                    f"({elapsed:.1f}s of audio)"
+                )
+
+            # Yield to event loop — allows receive loop
+            # to process deltas while sending
+            await asyncio.sleep(chunk_duration)
+
+        await self._send({
+            "type": "input_audio_buffer.commit",
+            "final": True,
+        })
+
+        await asyncio.wait_for(
+            self.transcription_done.wait(), timeout=60.0
+        )
 
 
 def main():
@@ -276,10 +244,11 @@ def main():
         "--model",
         default="mistralai/Voxtral-Mini-4B-Realtime-2602",
     )
+    parser.add_argument("--region", default="us-east-1")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("vLLM Realtime API — SageMaker Streaming Client")
+    print("vLLM Realtime API — SageMaker AI")
     print("=" * 60)
     print(f"Endpoint:  {args.ENDPOINT_NAME}")
     print(f"Model:     {args.model}")
@@ -288,7 +257,8 @@ def main():
 
     async def run():
         client = SageMakerRealtimeClient(
-            endpoint_name=args.ENDPOINT_NAME
+            endpoint_name=args.ENDPOINT_NAME,
+            region=args.region,
         )
         try:
             await client.connect()
@@ -297,7 +267,7 @@ def main():
             logger.info("Done")
             return 0
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error: {e}", exc_info=True)
             await client.close()
             return 1
 
