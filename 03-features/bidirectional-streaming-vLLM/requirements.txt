@@ -3,3 +3,5 @@ aws_sdk_sagemaker_runtime_http2==0.4.0
 librosa==0.11.0
 soundfile==0.13.1
 soxr==1.0.0
+cffi>=1.9
+gradio==6.9.0
