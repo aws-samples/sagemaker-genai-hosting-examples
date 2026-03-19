@@ -30,6 +30,10 @@ from aws_sdk_sagemaker_runtime_http2.models import (
     InvokeEndpointWithBidirectionalStreamInput,
     RequestStreamEventPayloadPart,
     RequestPayloadPart,
+    ResponseStreamEventPayloadPart,
+    ResponseStreamEventModelStreamError,
+    ResponseStreamEventInternalStreamFailure,
+    ResponseStreamEventUnknown,
 )
 from smithy_aws_core.identity import EnvironmentCredentialsResolver
 from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
@@ -121,55 +125,90 @@ async def streaming_handler():
 
     # ── Receive task ──
     async def receive_loop():
-        global transcription_text
-        try:
-            while True:
-                result = await output_stream.receive()
+            global transcription_text
+            try:
+                while True:
+                    result = await output_stream.receive()
 
-                if result is None:
-                    logger.info("Output stream ended")
-                    break
+                    if result is None:
+                        logger.info("Output stream ended")
+                        break
 
-                if not (result.value and result.value.bytes_):
-                    continue
+                    # ── Model stream error ──
+                    if isinstance(result, ResponseStreamEventModelStreamError):
+                        err = result.value
+                        logger.error(
+                            f"Model stream error: "
+                            f"[{err.error_code}] {err.message}"
+                        )
+                        transcription_complete.set()
+                        break
 
-                raw = result.value.bytes_.decode("utf-8")
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
+                    # ── Internal platform failure ──
+                    if isinstance(result, ResponseStreamEventInternalStreamFailure):
+                        err = result.value
+                        logger.error(
+                            f"Internal stream failure: {err.message}"
+                        )
+                        transcription_complete.set()
+                        break
 
-                msg_type = data.get("type", "unknown")
+                    # ── Unknown event type ──
+                    if isinstance(result, ResponseStreamEventUnknown):
+                        logger.warning(
+                            f"Unknown stream event: {result.tag}"
+                        )
+                        continue
 
-                if msg_type == "session.created":
-                    logger.info(
-                        f"✓ Session created: {data.get('id')}"
-                    )
-                    session_ready.set()
+                    # ── Normal payload ──
+                    if not isinstance(result, ResponseStreamEventPayloadPart):
+                        logger.warning(
+                            f"Unexpected event type: "
+                            f"{type(result).__name__}"
+                        )
+                        continue
 
-                elif msg_type == "transcription.delta":
-                    transcription_text += data.get("delta", "")
+                    payload = result.value
+                    if not (payload and payload.bytes_):
+                        continue
 
-                elif msg_type == "transcription.done":
-                    logger.info("✓ Transcription complete")
-                    if data.get("usage"):
-                        logger.info(f"Usage: {data['usage']}")
-                    transcription_complete.set()
-                    break
+                    raw = payload.bytes_.decode("utf-8")
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
 
-                elif msg_type == "error":
-                    logger.error(f"Server error: {data}")
-                    transcription_complete.set()
-                    break
+                    msg_type = data.get("type", "unknown")
 
-                else:
-                    logger.debug(f"[{msg_type}]")
+                    if msg_type == "session.created":
+                        logger.info(
+                            f"✓ Session created: {data.get('id')}"
+                        )
+                        session_ready.set()
 
-        except Exception as e:
-            logger.error(f"Receive error: {e}")
-        finally:
-            session_ready.set()
-            transcription_complete.set()
+                    elif msg_type == "transcription.delta":
+                        transcription_text += data.get("delta", "")
+
+                    elif msg_type == "transcription.done":
+                        logger.info("✓ Transcription complete")
+                        if data.get("usage"):
+                            logger.info(f"Usage: {data['usage']}")
+                        transcription_complete.set()
+                        break
+
+                    elif msg_type == "error":
+                        logger.error(f"Server error: {data}")
+                        transcription_complete.set()
+                        break
+
+                    else:
+                        logger.debug(f"[{msg_type}]")
+
+            except Exception as e:
+                logger.error(f"Receive error: {e}")
+            finally:
+                session_ready.set()
+                transcription_complete.set()
 
     # Start receiver FIRST — it handles session.created
     recv_task = asyncio.create_task(receive_loop())
@@ -383,4 +422,4 @@ if __name__ == "__main__":
     endpoint_name = args.endpoint_name
     aws_region = args.region
     model_name = args.model
-    demo.launch(share=args.share)
+    demo.launch(server_port=6006, share=True)

@@ -21,6 +21,10 @@ from aws_sdk_sagemaker_runtime_http2.models import (
     InvokeEndpointWithBidirectionalStreamInput,
     RequestStreamEventPayloadPart,
     RequestPayloadPart,
+    ResponseStreamEventPayloadPart,
+    ResponseStreamEventModelStreamError,
+    ResponseStreamEventInternalStreamFailure,
+    ResponseStreamEventUnknown,
 )
 from smithy_aws_core.identity import EnvironmentCredentialsResolver
 from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
@@ -95,61 +99,101 @@ class SageMakerRealtimeClient:
         await self.stream.input_stream.send(event)
 
     async def _receive_loop(self):
-        """
-        Receive server responses.
-        """
-        try:
-            output = await self.stream.await_output()
-            output_stream = output[1]
+            """
+            Receive server responses with proper event type handling.
 
-            while True:
-                result = await output_stream.receive()
+            Response events can be:
+            - ResponseStreamEventPayloadPart → model data
+            - ResponseStreamEventModelStreamError → model error
+            - ResponseStreamEventInternalStreamFailure → platform error
+            - ResponseStreamEventUnknown → unknown event
+            """
+            try:
+                output = await self.stream.await_output()
+                output_stream = output[1]
 
-                if result is None:
-                    logger.info("Output stream ended")
-                    break
+                while True:
+                    result = await output_stream.receive()
 
-                if not (result.value and result.value.bytes_):
-                    continue
+                    if result is None:
+                        logger.info("Output stream ended")
+                        break
 
-                raw = result.value.bytes_.decode("utf-8")
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    logger.warning(f"Non-JSON: {raw[:200]}")
-                    continue
+                    # ── Model stream error ──
+                    if isinstance(result, ResponseStreamEventModelStreamError):
+                        err = result.value
+                        logger.error(
+                            f"Model stream error: "
+                            f"[{err.error_code}] {err.message}"
+                        )
+                        self.transcription_done.set()
+                        break
 
-                msg_type = data.get("type", "unknown")
+                    # ── Internal platform failure ──
+                    if isinstance(result, ResponseStreamEventInternalStreamFailure):
+                        err = result.value
+                        logger.error(
+                            f"Internal stream failure: {err.message}"
+                        )
+                        self.transcription_done.set()
+                        break
 
-                if msg_type == "session.created":
-                    logger.info(
-                        f"✓ Session created: {data.get('id')}"
-                    )
-                    self.session_ready.set()
+                    # ── Unknown event type ──
+                    if isinstance(result, ResponseStreamEventUnknown):
+                        logger.warning(
+                            f"Unknown stream event: {result.tag}"
+                        )
+                        continue
 
-                elif msg_type == "transcription.delta":
-                    print(data.get("delta", ""), end="", flush=True)
+                    # ── Normal payload ──
+                    if not isinstance(result, ResponseStreamEventPayloadPart):
+                        logger.warning(
+                            f"Unexpected event type: {type(result).__name__}"
+                        )
+                        continue
 
-                elif msg_type == "transcription.done":
-                    print(f"\n\nFinal: {data.get('text', '')}")
-                    if data.get("usage"):
-                        print(f"Usage: {data['usage']}")
-                    self.transcription_done.set()
-                    break
+                    payload = result.value
+                    if not (payload and payload.bytes_):
+                        continue
 
-                elif msg_type == "error":
-                    logger.error(f"Server error: {data}")
-                    self.transcription_done.set()
-                    break
+                    raw = payload.bytes_.decode("utf-8")
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Non-JSON: {raw[:200]}")
+                        continue
 
-                else:
-                    logger.debug(f"[{msg_type}]")
+                    msg_type = data.get("type", "unknown")
 
-        except Exception as e:
-            logger.error(f"Receive error: {e}")
-        finally:
-            self.session_ready.set()
-            self.transcription_done.set()
+                    if msg_type == "session.created":
+                        logger.info(
+                            f"✓ Session created: {data.get('id')}"
+                        )
+                        self.session_ready.set()
+
+                    elif msg_type == "transcription.delta":
+                        print(data.get("delta", ""), end="", flush=True)
+
+                    elif msg_type == "transcription.done":
+                        print(f"\n\nFinal: {data.get('text', '')}")
+                        if data.get("usage"):
+                            print(f"Usage: {data['usage']}")
+                        self.transcription_done.set()
+                        break
+
+                    elif msg_type == "error":
+                        logger.error(f"Server error: {data}")
+                        self.transcription_done.set()
+                        break
+
+                    else:
+                        logger.debug(f"[{msg_type}]")
+
+            except Exception as e:
+                logger.error(f"Receive error: {e}")
+            finally:
+                self.session_ready.set()
+                self.transcription_done.set()
 
     async def connect(self):
         if not self.client:

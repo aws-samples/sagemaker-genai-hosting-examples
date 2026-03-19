@@ -4,3 +4,5 @@ soxr
 librosa
 soundfile
 xgrammar==0.1.29
+cffi>=1.9
+gradio==6.9.0
