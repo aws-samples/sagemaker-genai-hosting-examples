@@ -1,0 +1,6 @@
+accelerate
+mistral-common[audio]
+soxr
+librosa
+soundfile
+xgrammar==0.1.29
