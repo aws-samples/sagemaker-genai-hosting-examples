@@ -1,0 +1,7 @@
+
+transformers==4.38.2
+bitsandbytes
+accelerate
+peft==0.7.1
+wandb
+sagemaker==2.219.0
