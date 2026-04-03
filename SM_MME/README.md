@@ -10,7 +10,6 @@ A comprehensive SageMaker JumpStart pipeline for fine-tuning Mistral-7B with mul
 - **Volume**: 50K requests/day
 - **Accuracy**: >85%
 
-![image.png](attachment:e8558155-5c42-4dba-82d1-9c5a210c2696.png)
 
 ## 📋 Overview
 
