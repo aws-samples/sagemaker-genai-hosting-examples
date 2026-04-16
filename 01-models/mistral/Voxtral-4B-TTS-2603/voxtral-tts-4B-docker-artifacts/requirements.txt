@@ -1,0 +1,2 @@
+mistral-common>=1.10.0
+soundfile
