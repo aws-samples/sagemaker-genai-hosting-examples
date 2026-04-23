@@ -1,0 +1,4 @@
+# Build artifacts produced by running the notebook
+workspace/nli_deberta/
+triton-serve/
+model.tar.gz

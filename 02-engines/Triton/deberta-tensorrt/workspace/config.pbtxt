@@ -1,0 +1,41 @@
+name: "nli_deberta"
+backend: "onnxruntime"
+max_batch_size: 0
+
+input [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT64
+    dims: [ 50, 128 ]
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [ 50, 128 ]
+  }
+]
+
+output [
+  {
+    name: "confidence_vector"
+    data_type: TYPE_FP32
+    dims: [ 1, 50 ]
+  }
+]
+
+instance_group [
+  { kind: KIND_GPU, count: 1 }
+]
+
+optimization {
+  graph { level: 3 }
+  execution_accelerators {
+    gpu_execution_accelerator [
+      {
+        name: "tensorrt"
+        parameters { key: "precision_mode" value: "FP16" }
+        parameters { key: "max_workspace_size_bytes" value: "1073741824" }
+      }
+    ]
+  }
+}

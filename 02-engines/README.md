@@ -7,3 +7,4 @@ This directory contains example code how to build and use various model serving 
 - Large Model Inference (LMI) [LMI](./LMI/)
 - vLLM [vLLM](./vLLM/)
 - SGLang [SGLang](./SGLang/)
+- NVIDIA Triton Inference Server [Triton](./Triton/)
