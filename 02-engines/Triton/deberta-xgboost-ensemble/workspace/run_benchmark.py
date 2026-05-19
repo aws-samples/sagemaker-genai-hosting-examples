@@ -4,8 +4,9 @@ Step 4: Benchmark Endpoint
 Runs latency and throughput benchmarks against a deployed Triton endpoint.
 Supports Inference Component routing via --inference-component-name.
 
-Note: The endpoint expects tokenized inputs (input_ids, attention_mask), so this script
-performs client-side tokenization using the DeBERTa tokenizer.
+This script performs client-side tokenization: for each input text, it constructs
+N (premise, hypothesis) pairs, tokenizes them as a batch, and sends the
+[N, max_seq_len] tensors to the Triton ensemble.
 
 Inputs:
 - Deployed SageMaker endpoint
@@ -27,66 +28,89 @@ import concurrent.futures
 
 import boto3
 import numpy as np
-from transformers import DebertaV2Tokenizer
+from transformers import AutoTokenizer
 
-from config import BENCHMARK_TEXTS
+from config import (
+    NLI_MODEL_ID,
+    NLI_LABELS,
+    N_LABELS,
+    MAX_SEQ_LEN,
+    HYPOTHESIS_TEMPLATE,
+    BENCHMARK_TEXTS,
+)
 
 # Load tokenizer globally for reuse
 _tokenizer = None
 
 
-def get_tokenizer(max_seq_len: int = 128):
-    """Get or create the DeBERTa tokenizer."""
+def get_tokenizer():
+    """Get or create the NLI tokenizer."""
     global _tokenizer
     if _tokenizer is None:
-        print("Loading DeBERTa tokenizer...")
-        _tokenizer = DebertaV2Tokenizer.from_pretrained("microsoft/deberta-v3-base")
-        _tokenizer.model_max_length = max_seq_len
+        print(f"Loading tokenizer from {NLI_MODEL_ID}...")
+        _tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL_ID)
         print("✓ Tokenizer loaded")
     return _tokenizer
 
 
-def tokenize_text(text: str, max_seq_len: int = 128):
-    """Tokenize text for DeBERTa model."""
-    tokenizer = get_tokenizer(max_seq_len)
+def tokenize_nli_pairs(text: str, labels: list[str] = NLI_LABELS, max_seq_len: int = MAX_SEQ_LEN):
+    """
+    Tokenize N (premise, hypothesis) pairs for NLI scoring.
+
+    For a single input text and N candidate labels, constructs:
+        premise_i   = text
+        hypothesis_i = "This example is {label_i}."
+
+    Returns:
+        input_ids:      list of lists, shape [N, max_seq_len]
+        attention_mask: list of lists, shape [N, max_seq_len]
+    """
+    tokenizer = get_tokenizer()
+    premises = [text] * len(labels)
+    hypotheses = [HYPOTHESIS_TEMPLATE.format(label) for label in labels]
+
     encoded = tokenizer(
-        text,
+        premises,
+        hypotheses,
         padding="max_length",
         truncation=True,
         max_length=max_seq_len,
         return_tensors="np",
     )
-    return encoded["input_ids"][0].tolist(), encoded["attention_mask"][0].tolist()
+    return encoded["input_ids"].tolist(), encoded["attention_mask"].tolist()
 
 
 def invoke_endpoint(
     runtime,
     endpoint_name: str,
     text: str,
-    max_seq_len: int = 128,
     inference_component_name: str | None = None,
 ) -> tuple[int, float]:
     """
     Invoke the Triton endpoint with a single text input.
 
+    Tokenizes the text against all N labels client-side, sends [N, max_seq_len]
+    tensors to the ensemble. With max_batch_size=0, shapes match config exactly.
+
     Returns:
         tuple: (prediction, latency_ms)
     """
-    input_ids, attention_mask = tokenize_text(text, max_seq_len)
+    input_ids, attention_mask = tokenize_nli_pairs(text)
 
+    # With max_batch_size=0, shape matches config dims exactly (no batch dim)
     payload = {
         "inputs": [
             {
                 "name": "input_ids",
-                "shape": [1, max_seq_len],
+                "shape": [N_LABELS, MAX_SEQ_LEN],
                 "datatype": "INT64",
-                "data": [input_ids],
+                "data": input_ids,
             },
             {
                 "name": "attention_mask",
-                "shape": [1, max_seq_len],
+                "shape": [N_LABELS, MAX_SEQ_LEN],
                 "datatype": "INT64",
-                "data": [attention_mask],
+                "data": attention_mask,
             },
         ]
     }
@@ -111,8 +135,8 @@ def invoke_endpoint(
 
 def _worker(args):
     """Worker function for concurrent benchmarking."""
-    runtime, endpoint_name, text, max_seq_len, ic_name = args
-    return invoke_endpoint(runtime, endpoint_name, text, max_seq_len, ic_name)
+    runtime, endpoint_name, text, ic_name = args
+    return invoke_endpoint(runtime, endpoint_name, text, ic_name)
 
 
 def run_benchmark(
@@ -121,7 +145,6 @@ def run_benchmark(
     warmup: int = 5,
     iterations: int = 50,
     concurrency: int = 1,
-    max_seq_len: int = 128,
     inference_component_name: str | None = None,
 ):
     """Run benchmark against the deployed endpoint."""
@@ -139,20 +162,21 @@ def run_benchmark(
     if inference_component_name:
         print(f"  Inference Component: {inference_component_name}")
     print(f"  Region: {region}")
-    print(f"  Max sequence length: {max_seq_len}")
+    print(f"  NLI labels: {N_LABELS}")
+    print(f"  Max sequence length: {MAX_SEQ_LEN}")
     print(f"  Warmup requests: {warmup}")
     print(f"  Benchmark requests: {iterations}")
     print(f"  Concurrency: {concurrency}")
     print()
 
-    # Load tokenizer (will print message on first load)
-    get_tokenizer(max_seq_len)
+    # Load tokenizer
+    get_tokenizer()
     print()
 
     # Warmup phase
     print(f"Running {warmup} warmup request(s)...")
     for i in range(warmup):
-        invoke_endpoint(runtime, endpoint_name, cycle_text(i), max_seq_len, inference_component_name)
+        invoke_endpoint(runtime, endpoint_name, cycle_text(i), inference_component_name)
     print("✓ Warmup complete")
     print()
 
@@ -162,18 +186,16 @@ def run_benchmark(
     errors = 0
 
     if concurrency == 1:
-        # Sequential execution
         for i in range(iterations):
             try:
-                _, ms = invoke_endpoint(runtime, endpoint_name, cycle_text(i), max_seq_len, inference_component_name)
+                _, ms = invoke_endpoint(runtime, endpoint_name, cycle_text(i), inference_component_name)
                 latencies.append(ms)
             except Exception as e:
                 errors += 1
                 print(f"  [ERROR] Request {i}: {e}")
     else:
-        # Concurrent execution
         work = [
-            (runtime, endpoint_name, cycle_text(i), max_seq_len, inference_component_name)
+            (runtime, endpoint_name, cycle_text(i), inference_component_name)
             for i in range(iterations)
         ]
         wall_start = time.perf_counter()
@@ -233,7 +255,7 @@ def run_benchmark(
     print()
     print("Sample Predictions:")
     for text in BENCHMARK_TEXTS[:4]:
-        pred, ms = invoke_endpoint(runtime, endpoint_name, text, max_seq_len, inference_component_name)
+        pred, ms = invoke_endpoint(runtime, endpoint_name, text, inference_component_name)
         print(f"  [{pred}]  ({ms:.0f} ms)  \"{text[:55]}\"")
 
     print()
@@ -257,12 +279,6 @@ def main():
         help="AWS region (default: from boto3 session)",
     )
     parser.add_argument(
-        "--max-seq-len",
-        type=int,
-        default=128,
-        help="Maximum sequence length for tokenization (default: 128)",
-    )
-    parser.add_argument(
         "--warmup",
         type=int,
         default=5,
@@ -282,20 +298,17 @@ def main():
     )
     args = parser.parse_args()
 
-    # Determine region
     region = args.region
     if not region:
         session = boto3.Session()
         region = session.region_name
 
-    # Run benchmark
     run_benchmark(
         endpoint_name=args.endpoint_name,
         region=region,
         warmup=args.warmup,
         iterations=args.iterations,
         concurrency=args.concurrency,
-        max_seq_len=args.max_seq_len,
         inference_component_name=args.inference_component_name,
     )
 

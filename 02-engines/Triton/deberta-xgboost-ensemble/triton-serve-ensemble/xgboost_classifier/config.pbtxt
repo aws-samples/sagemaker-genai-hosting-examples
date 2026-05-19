@@ -1,0 +1,28 @@
+name: "xgboost_classifier"
+backend: "onnxruntime"
+max_batch_size: 0
+
+input [
+  {
+    name: "float_input"
+    data_type: TYPE_FP32
+    dims: [ 1, 50 ]
+  }
+]
+
+output [
+  {
+    name: "label"
+    data_type: TYPE_INT64
+    dims: [ 1 ]
+  },
+  {
+    name: "probabilities"
+    data_type: TYPE_FP32
+    dims: [ 1, 2 ]
+  }
+]
+
+instance_group [
+  { kind: KIND_CPU, count: 1 }
+]

@@ -7,7 +7,7 @@ The value over a generic framework DLC (HuggingFace, PyTorch) is that, once the 
 Triton features:
 
 - **Multi-framework backends** — ONNX Runtime, TensorRT, PyTorch, TensorFlow, Python, custom C++
-- **TensorRT integration** — JIT-compile GPU-specific kernels and layer fusion plans for FP16 / INT8 precision
+- **TensorRT integration** — JIT-compile GPU-specific kernels and layer fusion plans for FP16 / INT8 precision (JIT keeps the artifact portable across GPU architectures; for production, pre-compile a `.plan` on the target GPU family to avoid cold-start latency)
 - **ONNX Runtime graph optimisation** — operator fusion, constant folding, redundant-transpose elimination
 - **Dynamic batching** — coalesce concurrent requests into a single GPU forward pass
 - **Model ensembles** — chain multiple models server-side without client round-trips
@@ -20,7 +20,7 @@ SageMaker provides a managed Triton Deep Learning Container. The container is pu
 ## List of examples
 
 - [deberta-tensorrt](./deberta-tensorrt): Deploy a DeBERTa NLI model with ONNX Runtime + TensorRT FP16 on a SageMaker Inference Component. Includes a baseline-vs-optimised benchmark showing ~3.5× latency reduction.
-- [deberta-xgboost-ensemble](./deberta-xgboost-ensemble): Deploy a two-stage DeBERTa-v3 encoder + XGBoost classifier ensemble on Triton, chained server-side so the embedding tensor stays on the GPU host between models.
+- [deberta-xgboost-ensemble](./deberta-xgboost-ensemble): Deploy a zero-shot NLI cross-encoder + XGBoost ensemble on Triton. Shows per-request fan-out (1 text → N labels) with `max_batch_size: 0`, baked-in ONNX postprocessing, and TensorRT FP16 for ~3.4× lower mean latency.
 
 ## Additional resources
 
