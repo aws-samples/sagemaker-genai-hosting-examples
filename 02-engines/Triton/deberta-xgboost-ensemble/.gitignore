@@ -1,0 +1,40 @@
+# Model artifacts
+*.tar.gz
+*.onnx
+*.onnx.data
+*.bin
+*.pt
+*.pth
+*.safetensors
+
+# Model folders in workspace
+workspace/xgboost/
+workspace/nli_deberta/
+
+# Model files in triton repo (keep configs)
+triton-serve-ensemble/*/1/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Hidden/IDE folders
+.cache/
+.claude/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
