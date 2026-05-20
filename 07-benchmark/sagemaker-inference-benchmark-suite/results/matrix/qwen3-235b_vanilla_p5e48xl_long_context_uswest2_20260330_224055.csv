@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,ttft_p50,ttft_p90,ttft_avg,model,optimization,instance_type,region,timestamp
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,1,30,30,0,0.0,6255.8,9348.2,9863.1,6696.1,6194.1,9863.1,0,0,0,0,0.15,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,2,30,30,0,0.0,6683.2,6709.5,7905.9,6730.3,6506.5,7905.9,0,0,0,0,0.3,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,4,30,30,0,0.0,7905.9,8155.3,8163.2,7847.0,6612.2,8163.2,0,0,0,0,0.51,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,8,30,30,0,0.0,9426.6,9683.7,9698.1,9286.7,8722.3,9698.1,0,0,0,0,0.86,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,16,30,30,0,0.0,10749.6,10839.4,10890.6,10743.7,10620.8,10890.6,0,0,0,0,1.49,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,long_context,32,30,30,0,0.0,11831.7,11876.0,11892.3,11745.3,11505.1,11892.3,0,0,0,0,2.72,0.0,,,,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224055

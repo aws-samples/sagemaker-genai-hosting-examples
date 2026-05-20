@@ -1,0 +1,3 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+overnight-qwen3-lmcache-g6e12xl,multiturn_chat,1,30,30,0,1.0,16068.1,16293.2,16402.2,16110.6,16028.5,16402.2,37.2,37.3,521.7,600,0.06,36.0,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_001115
+overnight-qwen3-lmcache-g6e12xl,multiturn_chat,2,30,30,0,1.0,17506.8,17783.2,17829.4,17549.3,17456.7,17829.4,34.2,34.3,521.7,600,0.11,66.0,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_001115

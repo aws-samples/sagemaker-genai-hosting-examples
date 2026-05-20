@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+gptoss20b-byoc-vanilla-g6e12xl,long_context,1,30,17,13,0.88,4130.2,4360.2,4370.4,4155.5,4107.7,4370.4,144.4,145.3,1639.7,600,0.24,144.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357
+gptoss20b-byoc-vanilla-g6e12xl,long_context,2,30,18,12,1.0,5425.5,5496.9,5505.8,5434.0,5372.5,5505.8,110.4,110.6,1653.2,600,0.37,222.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357
+gptoss20b-byoc-vanilla-g6e12xl,long_context,4,30,15,15,0.87,6773.7,7021.7,7024.8,6728.8,5420.1,7024.8,89.5,88.6,1683.4,600,0.59,354.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357
+gptoss20b-byoc-vanilla-g6e12xl,long_context,8,30,21,9,0.95,8307.8,8506.6,8514.2,8386.5,8226.7,8514.2,71.6,72.2,1642.0,600,0.95,570.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357
+gptoss20b-byoc-vanilla-g6e12xl,long_context,16,30,16,14,1.0,10722.7,10790.0,10790.7,10724.0,10644.6,10790.7,56.0,56.0,1633.4,600,1.49,894.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357
+gptoss20b-byoc-vanilla-g6e12xl,long_context,32,30,17,13,1.0,12678.3,12693.8,12706.2,12676.7,12642.0,12706.2,47.3,47.3,1698.5,600,2.52,1512.0,gptoss20b-byoc-vanilla,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_124357

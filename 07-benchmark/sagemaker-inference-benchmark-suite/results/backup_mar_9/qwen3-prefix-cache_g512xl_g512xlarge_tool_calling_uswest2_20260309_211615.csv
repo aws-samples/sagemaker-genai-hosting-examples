@@ -1,0 +1,1 @@
+bench-matrix-qwen3-prefix-cache-g512xl,tool_calling,2,30,26,4,1.0,27028.0,27201.3,27336.6,26696.0,21639.1,27336.6,22.2,22.2,351.3,591.9,0.07,41.4,qwen3-prefix-cache,g512xl,ml.g5.12xlarge,us-west-2,20260309_211615

@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+final-qwen3-lmcache-g7e2xl,long_context,1,30,30,0,1.0,27288.9,27379.6,27490.9,27302.4,27223.3,27490.9,22.0,22.0,1662.3,600,0.04,24.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151
+final-qwen3-lmcache-g7e2xl,long_context,2,30,30,0,1.0,28331.7,28420.5,28460.3,28337.9,28266.3,28460.3,21.2,21.2,1662.3,600,0.07,42.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151
+final-qwen3-lmcache-g7e2xl,long_context,4,30,30,0,1.0,28658.9,28951.4,28994.0,28687.4,28355.0,28994.0,20.9,20.9,1662.3,600,0.14,84.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151
+final-qwen3-lmcache-g7e2xl,long_context,8,30,30,0,1.0,29306.8,29439.8,29443.3,29272.0,28993.6,29443.3,20.5,20.5,1662.3,600,0.27,162.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151
+final-qwen3-lmcache-g7e2xl,long_context,16,30,30,0,1.0,31135.6,31284.7,31293.4,31048.0,30791.3,31293.4,19.3,19.3,1662.3,600,0.52,312.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151
+final-qwen3-lmcache-g7e2xl,long_context,32,30,30,0,1.0,33251.4,33264.4,33269.3,33246.8,33119.8,33269.3,18.0,18.0,1662.3,600,0.96,576.0,qwen3,lmcache,ml.g7e.2xlarge,us-west-2,20260310_055151

@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,1,30,17,13,0.94,6064.2,6168.0,6314.9,6087.9,6055.5,6314.9,98.6,98.9,461.6,600,0.16,96.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,2,30,14,16,1.0,7729.4,7764.9,9607.1,7844.4,7609.5,9607.1,76.7,77.6,603.7,600,0.25,150.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,4,30,17,13,0.88,9495.2,9815.6,9821.7,9343.9,7690.4,9821.7,64.5,63.2,538.5,600,0.43,258.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,8,30,17,13,1.0,11564.5,11968.7,11975.9,11698.6,11457.0,11975.9,51.3,51.9,524.7,600,0.68,408.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,16,30,12,18,0.92,15105.8,15189.9,15192.9,15018.6,14766.7,15192.9,40.0,39.7,473.7,600,1.07,642.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600
+gptoss-byoc-v2-vanilla-g5,multiturn_chat,32,30,19,11,0.95,18925.7,18952.2,18964.3,18906.8,18721.7,18964.3,31.7,31.7,551.6,600,1.69,1014.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_132600

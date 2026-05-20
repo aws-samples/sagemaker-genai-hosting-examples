@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,latency_p50,latency_avg,latency_p99,tok_per_sec_avg,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,instance_type,region
+kimi-k2-5-260310-1830,long_context,1,30,30,0,5532.3,5560.1,5766.9,107.9,1536.3,600,0.18,107.9,kimi-k2.5,ml.p5e.48xlarge,us-west-2
+kimi-k2-5-260310-1830,long_context,2,30,30,0,6571.2,6592.1,6832.7,91.0,1536.3,600,0.3,182.0,kimi-k2.5,ml.p5e.48xlarge,us-west-2
+kimi-k2-5-260310-1830,long_context,4,30,30,0,7707.2,7656.6,8015.6,78.5,1536.3,600,0.52,313.5,kimi-k2.5,ml.p5e.48xlarge,us-west-2
+kimi-k2-5-260310-1830,long_context,8,30,30,0,9850.7,9455.2,10093.0,64.1,1536.3,600,0.85,507.7,kimi-k2.5,ml.p5e.48xlarge,us-west-2
+kimi-k2-5-260310-1830,long_context,16,30,30,0,11209.2,10512.8,11403.3,57.5,1536.3,600,1.52,913.2,kimi-k2.5,ml.p5e.48xlarge,us-west-2
+kimi-k2-5-260310-1830,long_context,32,30,29,1,12342.6,12320.5,12402.2,48.7,1527.3,600,2.6,1558.4,kimi-k2.5,ml.p5e.48xlarge,us-west-2

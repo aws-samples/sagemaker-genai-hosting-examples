@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+gptoss-final-vanilla-g5,long_context,1,30,30,0,0.6,6135.2,6179.5,6441.8,6145.1,6103.1,6441.8,97.6,97.8,1621.7,600,0.16,96.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902
+gptoss-final-vanilla-g5,long_context,2,30,30,0,0.53,7862.6,7932.6,8133.2,7877.3,7765.8,8133.2,76.2,76.3,1621.7,600,0.25,150.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902
+gptoss-final-vanilla-g5,long_context,4,30,30,0,0.6,9874.9,10120.8,10122.2,9763.7,7861.2,10122.2,61.6,60.8,1621.7,600,0.41,246.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902
+gptoss-final-vanilla-g5,long_context,8,30,30,0,0.6,12341.7,12623.6,12704.5,12391.0,12146.6,12704.5,48.4,48.6,1621.7,600,0.65,390.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902
+gptoss-final-vanilla-g5,long_context,16,30,30,0,0.67,15845.5,15863.7,15870.5,15831.0,15661.0,15870.5,37.9,37.9,1621.7,600,1.01,606.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902
+gptoss-final-vanilla-g5,long_context,32,30,30,0,0.6,20291.0,20317.1,20328.8,20266.8,20082.2,20328.8,29.6,29.6,1621.7,600,1.58,948.0,gpt-oss-20b,g5,ml.g5.12xlarge,us-east-1,20260310_195902

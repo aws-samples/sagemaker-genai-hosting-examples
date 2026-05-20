@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-matrix-gpt-oss-20b-eagle3-g6e12xl-useast1,long_context,1,30,15,15,1.0,4587.5,4782.3,5019.1,4599.9,4327.0,5019.1,130.7,130.8,1600.7,600,0.22,132.0,gpt-oss-20b-eagle3-g6e12xl,useast1,ml.g6e.12xlarge,us-east-1,20260309_213322

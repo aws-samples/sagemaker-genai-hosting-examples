@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,latency_p50,latency_avg,tok_per_sec_avg,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,instance_type,region
+qwen3-235b-e3-260311-1908,long_context,1,30,30,0,3487.1,3533.8,171.6,1662.3,600,0.28,169.8,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2
+qwen3-235b-e3-260311-1908,long_context,2,30,30,0,4190.9,4105.4,147.1,1662.3,600,0.49,292.3,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2
+qwen3-235b-e3-260311-1908,long_context,4,30,30,0,4818.0,4774.8,126.5,1662.3,600,0.84,502.6,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2
+qwen3-235b-e3-260311-1908,long_context,8,30,30,0,5412.0,5437.1,111.0,1662.3,600,1.47,882.8,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2
+qwen3-235b-e3-260311-1908,long_context,16,30,30,0,6179.3,6265.2,96.2,1662.3,600,2.55,1532.3,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2
+qwen3-235b-e3-260311-1908,long_context,32,30,30,0,8156.3,8191.2,73.5,1662.3,600,3.91,2344.0,qwen3-235b-eagle3,ml.p5e.48xlarge,us-west-2

@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+.env
+
+# Dependencies
+node_modules/
+
+# OMC state
+.omc/
+
+# Infra (internal demo, not benchmark related)
+infra/
+
+# Local backups
+.local_backups/
+
+# Large result archives only (CSVs and reports are tracked)
+results/matrix/benchmark_data_*.zip
+
+# BYOC container (contains account-specific ECR references)
+docker/gpt-oss/build.sh
+
+
+# Old scripts, results, reports (local archive)
+old/
+
+# References (local only — ollama-benchmark, aws-ai-infra-helper, etc.)
+references/

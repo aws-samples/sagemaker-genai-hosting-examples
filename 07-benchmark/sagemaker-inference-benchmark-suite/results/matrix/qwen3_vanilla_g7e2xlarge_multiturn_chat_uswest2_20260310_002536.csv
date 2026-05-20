@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-v2-qwen3-vanilla-g7e2xl,multiturn_chat,1,5,5,0,1.0,29322.4,29558.7,29558.7,29149.4,28645.5,29558.7,20.6,20.5,464.4,600,0.03,18.0,qwen3,vanilla,ml.g7e.2xlarge,us-west-2,20260310_002536

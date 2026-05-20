@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+gptoss-debug-g6e,multiturn_chat,1,10,9,1,1.0,3957.7,4190.8,4190.8,3982.9,3938.9,4190.8,150.7,151.6,540.4,600,0.25,150.0,gpt-oss-20b,g6e,ml.g6e.12xlarge,us-east-1,20260310_155758

@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+overnight-qwen3-lmcache-g6e12xl,tool_calling,1,30,30,0,1.0,5627.7,15314.8,16075.5,6922.4,1157.5,16075.5,36.5,37.0,618.7,255.6,0.14,35.8,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319
+overnight-qwen3-lmcache-g6e12xl,tool_calling,2,30,30,0,1.0,4569.9,14800.8,17546.9,6091.1,1296.8,17546.9,32.9,33.5,618.7,205.8,0.33,67.9,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319
+overnight-qwen3-lmcache-g6e12xl,tool_calling,4,30,30,0,1.0,5680.4,16871.7,17149.0,7899.6,1346.0,17149.0,32.2,32.1,618.7,257.8,0.51,131.5,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319
+overnight-qwen3-lmcache-g6e12xl,tool_calling,8,30,30,0,1.0,5423.4,13931.1,19864.1,7754.4,1419.2,19864.1,29.9,30.0,618.7,234.2,1.03,241.2,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319
+overnight-qwen3-lmcache-g6e12xl,tool_calling,16,30,30,0,1.0,7549.5,18779.6,22298.8,9712.9,1720.0,22298.8,25.1,25.4,618.7,253.6,1.65,418.4,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319
+overnight-qwen3-lmcache-g6e12xl,tool_calling,32,30,30,0,1.0,8344.0,23204.7,23208.6,11704.3,2626.9,23208.6,21.9,21.0,618.7,274.5,2.73,749.4,overnight-qwen3-lmcache,g6e12xl,ml.g6e.12xlarge,us-east-1,20260310_004319

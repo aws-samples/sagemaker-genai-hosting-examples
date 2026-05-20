@@ -1,0 +1,4 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-matrix-qwen3-prefix-cache-g512xl,tool_calling,1,30,30,0,1.0,26310.9,26449.1,26544.9,25950.7,19324.3,26544.9,22.8,22.8,614.7,591.0,0.04,23.6,qwen3-prefix-cache,g512xl,ml.g5.12xlarge,us-west-2,20260309_222621
+bench-matrix-qwen3-prefix-cache-g512xl,tool_calling,2,30,30,0,1.0,27016.4,27114.9,27225.5,26811.2,20364.6,27225.5,22.2,22.2,614.7,594.9,0.07,41.6,qwen3-prefix-cache,g512xl,ml.g5.12xlarge,us-west-2,20260309_222621
+bench-matrix-qwen3-prefix-cache-g512xl,tool_calling,4,30,16,14,1.0,27705.9,27887.2,27888.5,27728.6,27634.1,27888.5,21.6,21.7,613.4,599.9,0.14,84.0,qwen3-prefix-cache,g512xl,ml.g5.12xlarge,us-west-2,20260309_222621
