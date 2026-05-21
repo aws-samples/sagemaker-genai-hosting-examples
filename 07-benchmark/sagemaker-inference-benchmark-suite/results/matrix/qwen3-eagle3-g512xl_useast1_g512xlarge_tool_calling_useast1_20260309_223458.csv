@@ -1,0 +1,4 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-matrix-qwen3-eagle3-g512xl-useast1,tool_calling,1,30,30,0,1.0,15217.5,15942.9,16756.0,15044.9,12112.7,16756.0,39.7,39.4,614.7,595.3,0.07,41.7,qwen3-eagle3-g512xl,useast1,ml.g5.12xlarge,us-east-1,20260309_223458
+bench-matrix-qwen3-eagle3-g512xl-useast1,tool_calling,2,30,30,0,1.0,17043.3,18384.9,18877.9,16974.2,14264.2,18877.9,35.5,35.2,614.7,600,0.12,72.0,qwen3-eagle3-g512xl,useast1,ml.g5.12xlarge,us-east-1,20260309_223458
+bench-matrix-qwen3-eagle3-g512xl-useast1,tool_calling,4,30,20,10,1.0,18493.7,19307.2,19473.3,18146.0,14681.8,19473.3,32.9,32.3,613.9,595,0.22,130.9,qwen3-eagle3-g512xl,useast1,ml.g5.12xlarge,us-east-1,20260309_223458

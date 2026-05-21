@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+qwen35-122b-v4-260311-1845,multiturn_chat,1,30,30,0,1.0,4637.0,6785.9,7389.1,4969.8,4010.6,7389.1,123.5,129.4,526.3,600,0.2,120.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229
+qwen35-122b-v4-260311-1845,multiturn_chat,2,30,30,0,1.0,5173.8,5244.1,5259.4,5113.8,4400.5,5259.4,117.6,116.0,526.3,600,0.39,234.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229
+qwen35-122b-v4-260311-1845,multiturn_chat,4,30,30,0,1.0,5804.4,6163.9,6187.4,5772.5,5021.6,6187.4,104.4,103.4,526.3,600,0.69,414.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229
+qwen35-122b-v4-260311-1845,multiturn_chat,8,30,30,0,1.0,6392.1,7357.5,7360.1,6641.7,6351.2,7360.1,90.7,93.9,526.3,600,1.2,720.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229
+qwen35-122b-v4-260311-1845,multiturn_chat,16,30,30,0,1.0,7349.5,7368.7,7374.1,7050.6,6683.7,7374.1,85.3,81.6,526.3,600,2.27,1362.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229
+qwen35-122b-v4-260311-1845,multiturn_chat,32,30,30,0,1.0,8762.8,8778.1,8785.8,8763.9,8740.6,8785.8,68.5,68.5,526.3,600,3.65,2190.0,qwen3,1845,ml.p5e.48xlarge,us-west-2,20260311_191229

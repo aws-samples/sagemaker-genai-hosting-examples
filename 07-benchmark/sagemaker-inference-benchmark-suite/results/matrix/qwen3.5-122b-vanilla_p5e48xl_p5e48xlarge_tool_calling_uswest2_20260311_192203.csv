@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,latency_p50,latency_avg,latency_p99,tok_per_sec_avg,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,instance_type,region
+qwen35-122b-v4-260311-1845,tool_calling,16,30,1,29,1137.5,1137.5,1137.5,145.0,653,165,14.07,2320.8,qwen3.5-122b-vanilla,ml.p5e.48xlarge,us-west-2

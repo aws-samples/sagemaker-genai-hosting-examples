@@ -1,0 +1,61 @@
+name: MiMo-V2-Flash on g7e with Prefix Cache
+description: Xiaomi reasoning model with prefix caching
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  model:
+    id: XiaomiMiMo/MiMo-V2-Flash
+    short_name: mimo-v2-flash
+    trust_remote_code: true
+  instance:
+    type: ml.g7e.2xlarge
+    count: 1
+  container:
+    type: vllm-dlc
+    version: 0.17.0
+    cuda: cu129
+  vllm:
+    tensor_parallel_size: 1
+    dtype: bfloat16
+    max_model_len: 4096
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.9
+    enable_chunked_prefill: true
+    trust_remote_code: true
+  prefix_caching:
+    enabled: true
+  endpoint:
+    pattern: standard
+    name_prefix: bench
+    region: us-west-2
+    role_arn: arn:aws:iam::ACCOUNT_ID:role/SageMakerExecutionRole
+    health_check_timeout: 1200
+  speculative_decoding:
+    enabled: false
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  requests_per_level: 30
+  warmup_requests: 3
+  pause_between_levels_sec: 3
+  streaming: true
+  inference_params:
+    max_tokens: 600
+    temperature: 0.7
+    extra_payload:
+      stream_options:
+        include_usage: true
+  use_cases:
+  - multiturn_chat
+  - tool_calling
+  - long_context
+cost:
+  instance_cost_per_hour: 4.2

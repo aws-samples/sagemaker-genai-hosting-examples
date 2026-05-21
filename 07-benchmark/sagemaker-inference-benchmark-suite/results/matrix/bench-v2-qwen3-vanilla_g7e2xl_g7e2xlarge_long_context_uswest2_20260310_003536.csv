@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-v2-qwen3-vanilla-g7e2xl,long_context,1,30,30,0,1.0,29225.2,30952.1,36163.4,29717.1,28542.4,36163.4,20.2,20.5,1662.3,600,0.03,18.0,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_003536

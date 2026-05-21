@@ -1,0 +1,22 @@
+#!/bin/bash
+
+PREFIX="OPTION_"
+ARG_PREFIX="--"
+
+# port 8080 required by SageMaker
+# Enable tool calls and parse reasoning responses by default
+ARGS=(--tool-call-parser openai --enable-auto-tool-choice --reasoning-parser openai_gptoss --port 8080)
+
+while IFS='=' read -r key value; do
+    arg_name=$(echo "${key#"${PREFIX}"}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+    ARGS+=("${ARG_PREFIX}${arg_name}")
+    if [ -n "$value" ]; then
+        ARGS+=("$value")
+    fi
+done < <(env | grep "^${PREFIX}")
+
+echo "-------------------------------------------------------------------"
+echo "vLLM engine args: [${ARGS[@]}]"
+echo "-------------------------------------------------------------------"
+
+exec python3 -m vllm.entrypoints.openai.api_server "${ARGS[@]}"

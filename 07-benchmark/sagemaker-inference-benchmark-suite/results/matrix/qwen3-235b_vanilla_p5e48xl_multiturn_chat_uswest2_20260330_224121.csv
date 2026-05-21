@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,1,30,30,0,1.0,6213.1,6626.0,6651.6,6266.3,5872.5,6651.6,95.8,96.6,521.7,600,0.16,96.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,2,30,30,0,1.0,6618.2,7863.8,7924.6,6974.5,6521.8,7924.6,86.5,90.7,521.7,600,0.29,174.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,4,30,30,0,1.0,8167.0,9482.7,9524.4,8454.4,7012.8,9524.4,71.7,73.5,521.7,600,0.47,282.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,8,30,30,0,1.0,10283.0,10762.1,10802.8,10096.9,9087.8,10802.8,59.6,58.3,521.7,600,0.79,474.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,16,30,30,0,1.0,10738.5,10969.7,11215.2,10179.4,9349.0,11215.2,59.3,55.9,521.7,600,1.57,942.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121
+bench-qwen3-235b-p5e48xl-vanilla-0330-2201,multiturn_chat,32,30,30,0,1.0,11236.7,11254.4,11267.9,11146.2,10942.2,11267.9,53.8,53.4,521.7,600,2.87,1722.0,qwen3-235b,vanilla,ml.p5e.48xlarge,us-west-2,20260330_224121

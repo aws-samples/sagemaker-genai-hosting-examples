@@ -1,0 +1,60 @@
+name: GPT-OSS-20B on g7e with eagle3
+description: MoE 3.6B active, eagle3 on ml.g7e.2xlarge
+version: '1.0'
+pipeline: [deploy, benchmark, cleanup]
+deployment:
+  model:
+    id: openai/gpt-oss-20b
+    short_name: gpt-oss-20b
+    trust_remote_code: false
+  instance:
+    type: ml.g7e.2xlarge
+    count: 1
+  container:
+    type: vllm-dlc
+    version: 0.15.1
+    cuda: cu129
+  vllm:
+    tensor_parallel_size: 1
+    dtype: bfloat16
+    max_model_len: 4096
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.9
+    enable_chunked_prefill: true
+  speculative_decoding:
+    enabled: true
+    method: eagle3
+    model: RedHatAI/gpt-oss-20b-speculator.eagle3
+    num_speculative_tokens: 4
+  prefix_caching:
+    enabled: true
+  endpoint:
+    pattern: standard
+    name_prefix: bench
+    region: us-west-2
+    role_arn: arn:aws:iam::ACCOUNT_ID:role/SageMakerExecutionRole
+    health_check_timeout: 1200
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  requests_per_level: 30
+  warmup_requests: 3
+  pause_between_levels_sec: 3
+  streaming: true
+  inference_params:
+    max_tokens: 600
+    temperature: 0.7
+    extra_payload:
+      stream_options:
+        include_usage: true
+  use_cases:
+  - multiturn_chat
+  - tool_calling
+  - long_context
+cost:
+  instance_cost_per_hour: 4.2

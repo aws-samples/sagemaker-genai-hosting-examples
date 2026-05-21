@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+qwen35-122b-v4-260311-1845,tool_calling,1,30,30,0,1.0,2200.2,4385.9,5260.9,2661.9,1049.7,5260.9,121.0,117.2,637.7,321.3,0.38,122.1,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915
+qwen35-122b-v4-260311-1845,tool_calling,2,30,30,0,1.0,2583.4,4586.3,4909.7,2746.6,949.0,4909.7,110.1,106.0,637.7,298.2,0.73,217.7,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915
+qwen35-122b-v4-260311-1845,tool_calling,4,30,30,0,1.0,2375.9,5495.9,5615.1,2761.5,1212.0,5615.1,106.3,105.6,637.7,295.1,1.45,427.9,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915
+qwen35-122b-v4-260311-1845,tool_calling,8,30,30,0,1.0,3394.3,6416.7,7108.0,3365.3,1453.8,7108.0,87.2,84.7,637.7,295.4,2.38,703.1,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915
+qwen35-122b-v4-260311-1845,tool_calling,16,30,30,0,1.0,3767.4,6667.8,7785.0,4165.9,1921.9,7785.0,75.8,71.4,637.7,324.2,3.84,1244.9,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915
+qwen35-122b-v4-260311-1845,tool_calling,32,30,30,0,1.0,3137.1,6274.5,6465.4,3488.8,1989.0,6465.4,73.3,70.4,637.7,267.8,9.17,2455.7,qwen35-122b,1845,ml.p5e.48xlarge,us-west-2,20260311_190915

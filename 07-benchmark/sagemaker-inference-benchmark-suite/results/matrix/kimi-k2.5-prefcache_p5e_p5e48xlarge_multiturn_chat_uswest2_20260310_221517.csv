@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,latency_p50,latency_avg,tok_per_sec_avg,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,instance_type,region
+kimi-bench-260310-2151,multiturn_chat,1,30,30,0,5464.2,5476.5,109.6,511,600,0.18,109.6,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2
+kimi-bench-260310-2151,multiturn_chat,2,30,30,0,5789.9,5805.4,103.4,511,600,0.34,206.7,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2
+kimi-bench-260310-2151,multiturn_chat,4,30,30,0,6442.5,6408.3,93.7,511,600,0.62,374.5,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2
+kimi-bench-260310-2151,multiturn_chat,8,30,30,0,7499.8,7532.0,79.7,511,600,1.06,637.3,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2
+kimi-bench-260310-2151,multiturn_chat,16,30,30,0,9530.9,9508.0,63.1,511,600,1.68,1009.7,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2
+kimi-bench-260310-2151,multiturn_chat,32,30,30,0,12473.7,12468.5,48.1,511,600,2.57,1539.9,kimi-k2.5-prefcache,ml.p5e.48xlarge,us-west-2

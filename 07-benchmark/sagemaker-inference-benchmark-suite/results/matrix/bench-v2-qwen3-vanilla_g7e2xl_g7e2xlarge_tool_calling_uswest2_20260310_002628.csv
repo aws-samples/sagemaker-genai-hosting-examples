@@ -1,0 +1,7 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,1,30,30,0,1.0,9257.7,28879.7,29898.1,12022.0,2041.7,29898.1,19.9,19.9,618.7,242.0,0.08,19.4,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,2,30,30,0,1.0,10900.8,28779.6,30139.0,13381.1,2087.7,30139.0,19.4,19.9,618.7,261.4,0.15,39.2,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,4,30,30,0,1.0,10016.8,29621.0,29944.7,13567.0,2115.4,29944.7,19.8,20.0,618.7,271.2,0.29,78.6,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,8,30,30,0,1.0,10727.7,22547.6,29714.5,12529.1,2070.1,29714.5,19.5,19.6,618.7,246.9,0.64,158.0,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,16,30,30,0,1.0,10299.3,29844.7,31091.9,14074.8,2195.8,31091.9,18.8,19.1,618.7,269.2,1.14,306.9,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628
+bench-v2-qwen3-vanilla-g7e2xl,tool_calling,32,30,30,0,1.0,8917.7,31001.4,31009.9,12975.6,2813.6,31009.9,17.5,17.8,618.7,240.0,2.47,592.8,bench-v2-qwen3-vanilla,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_002628

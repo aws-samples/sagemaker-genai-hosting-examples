@@ -1,0 +1,63 @@
+name: Qwen3-32B on g7e with vanilla
+description: Dense 32B model, vanilla optimization on ml.g7e.2xlarge
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  model:
+    id: Qwen/Qwen3-32B
+    short_name: qwen3-32b
+    trust_remote_code: false
+  instance:
+    type: ml.g7e.2xlarge
+    count: 1
+  container:
+    type: vllm-dlc
+    version: 0.15.1
+    cuda: cu129
+  vllm:
+    tensor_parallel_size: 1
+    dtype: bfloat16
+    max_model_len: 4096
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.9
+    max_num_batched_tokens: 8192
+    enable_chunked_prefill: true
+  speculative_decoding:
+    enabled: false
+  prefix_caching:
+    enabled: false
+  endpoint:
+    pattern: standard
+    name_prefix: bench
+    region: us-west-2
+    role_arn: arn:aws:iam::ACCOUNT_ID:role/SageMakerExecutionRole
+    health_check_timeout: 1200
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  requests_per_level: 30
+  warmup_requests: 3
+  pause_between_levels_sec: 3
+  streaming: true
+  inference_params:
+    max_tokens: 600
+    temperature: 0.7
+    extra_payload:
+      chat_template_kwargs:
+        enable_thinking: false
+      stream_options:
+        include_usage: true
+  use_cases:
+  - multiturn_chat
+  - tool_calling
+  - long_context
+cost:
+  instance_cost_per_hour: 4.2

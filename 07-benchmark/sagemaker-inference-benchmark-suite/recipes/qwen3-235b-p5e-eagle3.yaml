@@ -1,0 +1,68 @@
+name: Qwen3-235B-A22B on p5e with eagle3
+description: MoE 235B total, 22B active, eagle3 on 8xH200
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  model:
+    id: Qwen/Qwen3-235B-A22B
+    short_name: qwen3-235b
+    trust_remote_code: false
+  instance:
+    type: ml.p5e.48xlarge
+    count: 1
+  container:
+    type: djl-lmi
+    version: v20
+  vllm:
+    tensor_parallel_size: 8
+    dtype: bfloat16
+    max_model_len: 4096
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.9
+    enable_chunked_prefill: true
+  speculative_decoding:
+    enabled: true
+    method: eagle3
+    model: RedHatAI/Qwen3-235B-A22B-speculator.eagle3
+    num_speculative_tokens: 4
+  prefix_caching:
+    enabled: true
+  endpoint:
+    pattern: inference_component
+    name_prefix: bench
+    region: us-west-2
+    role_arn: arn:aws:iam::ACCOUNT_ID:role/SageMakerBenchmarkRole
+    health_check_timeout: 1800
+    ic:
+      num_accelerators: 8
+      min_memory_mb: 1024
+      managed_scaling: true
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  requests_per_level: 30
+  warmup_requests: 3
+  pause_between_levels_sec: 3
+  streaming: true
+  inference_params:
+    max_tokens: 600
+    temperature: 0.7
+    extra_payload:
+      chat_template_kwargs:
+        enable_thinking: false
+      stream_options:
+        include_usage: true
+  use_cases:
+  - multiturn_chat
+  - tool_calling
+  - long_context
+cost:
+  instance_cost_per_hour: 80.0

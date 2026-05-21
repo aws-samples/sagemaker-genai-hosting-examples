@@ -1,0 +1,76 @@
+name: Qwen3-32B on HyperPod g5 with KV Cache + Intelligent Routing
+description: Dense 32B model on HyperPod EKS with tiered KV cache and prefix-aware
+  routing
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  platform: hyperpod
+  model:
+    id: Qwen/Qwen3-32B
+    short_name: qwen3-32b
+  instance:
+    type: ml.g5.24xlarge
+  container:
+    type: vllm-dlc
+    version: 0.15.1
+    cuda: cu129
+  vllm:
+    tensor_parallel_size: 4
+    dtype: bfloat16
+    max_model_len: 4096
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.9
+  prefix_caching:
+    enabled: true
+  hyperpod:
+    cluster_name: my-hyperpod-cluster
+    namespace: default
+    replicas: 1
+    invocation_endpoint: v1/chat/completions
+    model_source:
+      type: s3
+      s3_bucket: my-model-bucket
+      s3_region: us-west-2
+      model_location: models/Qwen3-32B
+    kv_cache:
+      l1_cache: true
+      l2_cache: true
+      l2_backend: tieredstorage
+    routing:
+      enabled: true
+      strategy: prefixaware
+    worker:
+      gpu_count: 4
+      cpu_request: '6'
+      memory_request: 30Gi
+  endpoint:
+    region: us-west-2
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  requests_per_level: 30
+  warmup_requests: 3
+  pause_between_levels_sec: 3
+  streaming: true
+  inference_params:
+    max_tokens: 600
+    temperature: 0.7
+    extra_payload:
+      chat_template_kwargs:
+        enable_thinking: false
+      stream_options:
+        include_usage: true
+  use_cases:
+  - multiturn_chat
+  - tool_calling
+  - long_context
+cost:
+  instance_cost_per_hour: 0.0

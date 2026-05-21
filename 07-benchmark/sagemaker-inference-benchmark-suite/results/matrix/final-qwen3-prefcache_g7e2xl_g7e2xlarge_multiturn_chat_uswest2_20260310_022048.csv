@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+final-qwen3-prefcache-g7e2xl,multiturn_chat,1,30,7,23,1.0,27180.7,27270.7,27270.7,27195.9,27127.9,27270.7,22.1,22.1,484.3,600,0.04,24.0,final-qwen3-prefcache,g7e2xl,ml.g7e.2xlarge,us-west-2,20260310_022048

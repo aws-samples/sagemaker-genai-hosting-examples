@@ -1,0 +1,2 @@
+endpoint,use_case,concurrency,total_requests,successful,failed,output_validation_rate,latency_p50,latency_p90,latency_p99,latency_avg,latency_min,latency_max,tok_per_sec_avg,tok_per_sec_p50,avg_input_tokens,avg_output_tokens,rps,aggregate_output_tok_sec,model,optimization,instance_type,region,timestamp
+bench-matrix-qwen3-eagle3-g512xl-useast1,multiturn_chat,1,30,5,25,1.0,17378.7,17521.6,17521.6,17275.6,17006.7,17521.6,34.7,34.5,460.4,600,0.06,36.0,qwen3-eagle3-g512xl,useast1,ml.g5.12xlarge,us-east-1,20260309_214955
