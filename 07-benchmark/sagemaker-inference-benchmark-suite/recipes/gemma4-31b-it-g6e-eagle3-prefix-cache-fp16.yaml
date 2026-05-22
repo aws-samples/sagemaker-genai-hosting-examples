@@ -1,0 +1,68 @@
+name: Gemma4-31B-IT on g6e with EAGLE3 + Prefix Cache (Ada Lovelace)
+description: >
+  Google Gemma 4 31B Instruct (BF16) on 4x L40S with EAGLE3 speculative
+  decoding + prefix caching. Customer workload: classification with structured
+  JSON output, ~9K input tokens, ~512 output tokens. TP=4 across 4 GPUs.
+  EAGLE3 speedup may be lower at TP=4 due to inter-GPU sync overhead.
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  model:
+    id: google/gemma-4-31b-it
+    short_name: gemma4-31b-it
+    trust_remote_code: false
+  instance:
+    type: ml.g6e.12xlarge
+    count: 1
+  container:
+    type: vllm-dlc
+    version: 0.20.0
+    cuda: cu130
+  vllm:
+    tensor_parallel_size: 4
+    dtype: bfloat16
+    max_model_len: 12288
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.95
+    max_num_batched_tokens: 12288
+    enable_chunked_prefill: true
+    trust_remote_code: false
+  speculative_decoding:
+    enabled: true
+    method: eagle3
+    model: RedHatAI/gemma-4-31B-it-speculator.eagle3
+    num_speculative_tokens: 4
+  prefix_caching:
+    enabled: true
+  endpoint:
+    pattern: standard
+    name_prefix: bench
+    region: ap-south-1
+    role_arn: arn:aws:iam::774297356213:role/administrator_role
+    health_check_timeout: 1800
+benchmark:
+  concurrency_levels:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+  requests_per_level: 200
+  warmup_requests: 3
+  pause_between_levels_sec: 5
+  streaming: true
+  inference_params:
+    max_tokens: 512
+    temperature: 0.0
+    extra_payload:
+      stream_options:
+        include_usage: true
+  use_cases:
+  - classification
+cost:
+  instance_cost_per_hour: 13.12
