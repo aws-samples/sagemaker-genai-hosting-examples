@@ -1,0 +1,69 @@
+name: Gemma4-31B-IT on g7e.12xlarge with EAGLE3 + Prefix Cache + FP8 (Blackwell)
+description: >
+  Google Gemma 4 31B Instruct (FP8) on 2x B200 with EAGLE3 speculative
+  decoding + prefix caching + FP8 quantization. Customer workload:
+  classification with structured JSON output, ~9K input tokens, ~512 output
+  tokens. TP=2 across 2 GPUs. FP8 reduces memory footprint ~2x vs BF16.
+  B200 has native FP8 tensor cores for optimal throughput.
+version: '1.0'
+pipeline:
+- deploy
+- benchmark
+- cleanup
+deployment:
+  model:
+    id: google/gemma-4-31b-it
+    short_name: gemma4-31b-it
+    trust_remote_code: false
+  instance:
+    type: ml.g7e.12xlarge
+    count: 1
+  container:
+    type: vllm-dlc
+    version: 0.20.0
+    cuda: cu130
+  vllm:
+    tensor_parallel_size: 2
+    dtype: auto
+    max_model_len: 16384
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.95
+    max_num_batched_tokens: 16384
+    enable_chunked_prefill: true
+    trust_remote_code: false
+  quantization:
+    method: fp8
+  speculative_decoding:
+    enabled: true
+    method: eagle3
+    model: RedHatAI/gemma-4-31B-it-speculator.eagle3
+    num_speculative_tokens: 4
+  prefix_caching:
+    enabled: true
+  endpoint:
+    pattern: standard
+    name_prefix: bench
+    region: ap-south-1
+    role_arn: arn:aws:iam::774297356213:role/administrator_role
+    health_check_timeout: 1800
+benchmark:
+  concurrency_levels:
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+  requests_per_level: 200
+  warmup_requests: 3
+  pause_between_levels_sec: 5
+  streaming: true
+  inference_params:
+    max_tokens: 512
+    temperature: 0.0
+    extra_payload:
+      stream_options:
+        include_usage: true
+  use_cases:
+  - classification
+cost:
+  instance_cost_per_hour: 14.584
