@@ -263,34 +263,54 @@ def list_endpoints(region: str, name_prefix: str = None):
 
 def _deploy_standard(config: BenchmarkConfig, image_uri: str,
                      env: dict, endpoint_name: str) -> DeploymentResult:
-    """Deploy using SageMaker SDK Model.deploy() — standard pattern."""
-    import sagemaker
-    from sagemaker.model import Model
-    from sagemaker.predictor import Predictor
-    from sagemaker.serializers import JSONSerializer
+    """Deploy using SageMaker SDK v3 sagemaker.core.resources — standard pattern.
+
+    Artifact-less BYOC: the container fetches the model at startup via env vars
+    (e.g., SM_VLLM_MODEL, HF_MODEL_ID), so there is no model_data_url to upload.
+    Uses sagemaker.core.resources.Model/EndpointConfig/Endpoint, the v3 mapping
+    for the boto3 CreateModel/CreateEndpointConfig/CreateEndpoint calls.
+    """
+    from sagemaker.core.resources import Endpoint, EndpointConfig, Model
+    from sagemaker.core.shapes import ContainerDefinition, ProductionVariant
 
     d = config.deployment
     region = d.endpoint.region
-
     boto_session = boto3.Session(region_name=region)
-    sm_session = sagemaker.Session(boto_session=boto_session)
 
-    model = Model(
-        image_uri=image_uri,
-        role=d.endpoint.role_arn,
-        predictor_cls=Predictor,
-        env=env,
-        sagemaker_session=sm_session,
-    )
+    model_name = f"mdl-{endpoint_name}"[:63]
+    epc_name = f"epc-{endpoint_name}"[:63]
 
     try:
-        model.deploy(
-            instance_type=d.instance.type,
-            initial_instance_count=d.instance.count,
-            endpoint_name=endpoint_name,
-            container_startup_health_check_timeout=d.endpoint.health_check_timeout,
-            serializer=JSONSerializer(),
+        Model.create(
+            model_name=model_name,
+            primary_container=ContainerDefinition(image=image_uri, environment=env),
+            execution_role_arn=d.endpoint.role_arn,
+            session=boto_session,
+            region=region,
         )
+        EndpointConfig.create(
+            endpoint_config_name=epc_name,
+            production_variants=[ProductionVariant(
+                variant_name="AllTraffic",
+                model_name=model_name,
+                instance_type=d.instance.type,
+                initial_instance_count=d.instance.count,
+                container_startup_health_check_timeout_in_seconds=d.endpoint.health_check_timeout,
+            )],
+            session=boto_session,
+            region=region,
+        )
+        Endpoint.create(
+            endpoint_name=endpoint_name,
+            endpoint_config_name=epc_name,
+            session=boto_session,
+            region=region,
+        )
+
+        if not wait_for_endpoint(endpoint_name, region,
+                                  timeout_sec=d.endpoint.health_check_timeout):
+            return DeploymentResult(endpoint_name, None, False, region, 0)
+
         print(f"\nEndpoint deployed: {endpoint_name}")
         return DeploymentResult(
             endpoint_name=endpoint_name, ic_name=None,

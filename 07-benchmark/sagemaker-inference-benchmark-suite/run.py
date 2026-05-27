@@ -107,7 +107,8 @@ Standalone (no config needed):
     parser.add_argument("--ic", default=None,
                         help="Inference Component name")
     parser.add_argument("--role", default=None, help="IAM role ARN")
-    parser.add_argument("--region", default="us-west-2", help="AWS region")
+    parser.add_argument("--region", default=None,
+                        help="AWS region (overrides recipe; falls back to us-west-2 for standalone commands)")
     parser.add_argument("--pattern", default=None,
                         choices=["standard", "inference_component"],
                         help="Deployment pattern")
@@ -162,7 +163,8 @@ Standalone (no config needed):
 
     if args.status:
         from scripts.deployer import list_endpoints
-        regions = [args.region] if args.region != "all" else ["us-west-2", "us-east-1"]
+        region = args.region or "us-west-2"
+        regions = [region] if region != "all" else ["us-west-2", "us-east-1"]
         for r in regions:
             list_endpoints(r, args.prefix)
         return 0
@@ -179,7 +181,7 @@ Standalone (no config needed):
             print("Error: --endpoint required for standalone cleanup.")
             return 1
         from scripts.deployer import cleanup
-        cleanup(args.endpoint, args.region, args.pattern or "standard")
+        cleanup(args.endpoint, args.region or "us-west-2", args.pattern or "standard")
         return 0
 
     # ================================================================
