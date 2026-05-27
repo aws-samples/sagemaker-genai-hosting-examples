@@ -1,0 +1,238 @@
+# =============================================================================
+# SageMaker GenAI Inference Benchmarking — Configuration Template
+# =============================================================================
+# Copy this file to benchmarks.yaml and fill in your values.
+# This single config drives all three execution paths (SMAI, HyperPod, BYOM).
+#
+# Architecture:
+#   workloads   → named profiles mapping business use cases to benchmark parameters
+#   models      → model + instance + serving engine combinations (shared across paths)
+#   *_defaults  → path-specific defaults (SMAI, HyperPod, BYOM)
+#   *_benchmarks → which workloads to run against which models per path
+
+# ---------------------------------------------------------------------------
+# Central Results (Athena)
+# ---------------------------------------------------------------------------
+# All results are written to a central S3 prefix for Athena/QuickSight analysis.
+athena:
+  bucket: sagemaker-benchmark-<REGION>-<ACCOUNT_ID>
+  region: <REGION>
+  prefix: athena/results
+
+# ---------------------------------------------------------------------------
+# Workload Profiles
+# ---------------------------------------------------------------------------
+# Each workload maps a business use case to concrete benchmark dimensions.
+# These are opinionated, documented, and defensible configurations.
+
+workloads:
+  multi_turn_chat:
+    description: "Conversations with 1-10 rounds of back-and-forth. Copilots, virtual assistants, customer support."
+    input_tokens: 500
+    output_tokens: 500
+    concurrency: [1, 4, 8, 16, 32, 64]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+  rag_document_qa:
+    description: "Documents from 2K-10K tokens injected as context. Enterprise knowledge bases, legal & medical search."
+    input_tokens: 5000
+    output_tokens: 500
+    concurrency: [1, 4, 8, 16, 32]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+  agent_tool_calling:
+    description: "Multi-step agents with 5-10 tool calls per session. Coding agents, research agents, workflow automation."
+    input_tokens: 1000
+    output_tokens: 200
+    concurrency: [1, 4, 8, 16, 32, 64]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+  long_context_scaling:
+    description: "Inputs from 1K to 16K tokens at production load. Stress-tests prefill performance."
+    input_tokens: 10000
+    output_tokens: 500
+    concurrency: [1, 4, 8, 16]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+  production_traffic_mix:
+    description: "Balanced workload representing aggregate real traffic at varying concurrency."
+    input_tokens: 1000
+    output_tokens: 1000
+    concurrency: [1, 4, 8, 16, 32, 64]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+  shared_system_prompt:
+    description: "Same prompt across 4-16 users served concurrently. Tests prefix caching / prompt reuse."
+    input_tokens: 3000
+    output_tokens: 500
+    concurrency: [4, 8, 16]
+    streaming: true
+    dataset: blazedit_10k
+    duration: 300
+    warmup: 30
+
+# ---------------------------------------------------------------------------
+# Model Deployments
+# ---------------------------------------------------------------------------
+# Each model defines a deployable unit shared across all three paths.
+#
+# Path-specific config:
+#   env:           SM_VLLM_* env vars (SMAI DLC only)
+#   hyperpod_args: vLLM CLI args (HyperPod EC2 image)
+#   hyperpod_env:  Pod env vars (HyperPod, non-SM_VLLM vars)
+#   byom:          Bedrock BYOM import config
+#
+# GPU configuration:
+#   ml.p6-b200.48xlarge = 8× NVIDIA B200 GPUs → tensor_parallel_size=8
+#   ml.p5e.48xlarge     = 8× NVIDIA H100      → tensor_parallel_size=8
+
+models:
+  # --- Example 1: Simple model (no special serving config) ---
+  gemma-4-31b-vllm:
+    model_name: google/gemma-4-31B-it
+    deployment_config: transformers-vllm
+    instance_type: ml.p6-b200.48xlarge
+    num_gpus: 8
+    variant: baseline
+    s3_model_uri: ""  # fill after: python download_models.py --region <REGION> --model=gemma-4-31b
+    byom:
+      base_model_id: "google.gemma-4-31b-it"
+      model_id: ""  # fill after import
+
+  # --- Example 2: Model with SMAI env + HyperPod args + BYOM ---
+  deepseek-v4-pro-vllm:
+    model_name: deepseek-ai/DeepSeek-V4-Pro
+    deployment_config: transformers-vllm
+    instance_type: ml.p6-b200.48xlarge
+    num_gpus: 8
+    variant: baseline
+    s3_model_uri: ""  # fill after: python download_models.py --region <REGION> --model=deepseek-v4-pro
+    # SMAI: env vars translated to vLLM args by the SageMaker DLC entrypoint
+    env:
+      SM_VLLM_KV_CACHE_DTYPE: "fp8"
+    # HyperPod: explicit CLI args (EC2 image doesn't have SM_VLLM_* translation)
+    hyperpod_args: ["--kv-cache-dtype", "fp8"]
+    # BYOM: Mantle import config
+    byom:
+      base_model_id: "deepseek.deepseek-v3.1"
+      model_id: ""  # fill after import
+
+  # --- Example 3: Complex model with speculative decoding ---
+  kimi-k2-6-nvfp4:
+    model_name: nvidia/Kimi-K2.6-NVFP4
+    deployment_config: transformers-vllm
+    instance_type: ml.p6-b200.48xlarge
+    num_gpus: 8
+    variant: optimized-nvfp4-eagle3
+    benchmark_tokenizer: Qwen/Qwen2.5-7B  # Proxy tokenizer for AIPerf (model's own requires trust_remote_code)
+    s3_model_uri: ""  # fill after download
+    # SMAI
+    env:
+      VLLM_USE_FLASHINFER_MOE_FP4: "1"
+      SM_VLLM_TRUST_REMOTE_CODE: "true"
+      SM_VLLM_KV_CACHE_DTYPE: "fp8"
+      SM_VLLM_REASONING_PARSER: "kimi_k2"
+      SM_VLLM_CONFIG: "/opt/ml/model/vllm_config.yaml"
+      SM_VLLM_MM_ENCODER_TP_MODE: "data"
+      SM_VLLM_TOOL_CALL_PARSER: "kimi_k2"
+      SM_VLLM_ENABLE_AUTO_TOOL_CHOICE: ""
+    # HyperPod
+    hyperpod_env:
+      VLLM_USE_FLASHINFER_MOE_FP4: "1"
+    hyperpod_args:
+      - "--speculative-config"
+      - '{"model": "lightseekorg/kimi-k2.6-eagle3-mla", "method": "eagle3", "num_speculative_tokens": 3}'
+      - "--kv-cache-dtype"
+      - "fp8"
+      - "--reasoning-parser"
+      - "kimi_k2"
+      - "--tool-call-parser"
+      - "kimi_k2"
+      - "--enable-auto-tool-choice"
+      - "--mm-encoder-tp-mode"
+      - "data"
+
+# ---------------------------------------------------------------------------
+# SageMaker Managed Inference Defaults
+# ---------------------------------------------------------------------------
+sagemaker_defaults:
+  region: <REGION>
+  deployment_target: managed-inference
+  cleanup: true  # cleanup between models (single instance via FTP)
+  sagemaker_image: 763104351884.dkr.ecr.{region}.amazonaws.com/vllm:0.20.2-gpu-py312-cu130-ubuntu22.04-sagemaker-v1.2
+  inference_ami_version: al2023-ami-sagemaker-inference-gpu-4-1
+  role_arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+  ml_reservation_arn: arn:aws:sagemaker:<REGION>:<ACCOUNT_ID>:training-plan/<TRAINING_PLAN_NAME>
+  s3_output: s3://sagemaker-benchmark-{region}-<ACCOUNT_ID>/managed-inference
+  vllm_config:
+    max_model_len: "16384"
+    gpu_memory_utilization: "0.9"
+
+sagemaker_benchmarks:
+  - model: gemma-4-31b-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling, long_context_scaling, production_traffic_mix, shared_system_prompt]
+
+  - model: deepseek-v4-pro-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling, long_context_scaling, production_traffic_mix, shared_system_prompt]
+
+# ---------------------------------------------------------------------------
+# HyperPod EKS Defaults
+# ---------------------------------------------------------------------------
+hyperpod_defaults:
+  region: <REGION>
+  namespace: benchmarking
+  role_arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+  s3_output: s3://sagemaker-benchmark-{region}-<ACCOUNT_ID>/hyperpod
+  hyperpod_cluster_name: "<CLUSTER_NAME>"
+  # EC2 vLLM image (NOT the SageMaker DLC — EC2 image respects CLI args)
+  vllm_image: public.ecr.aws/deep-learning-containers/vllm:0.20.2-gpu-py312-ec2
+  vllm_config:
+    max_model_len: "16384"
+    gpu_memory_utilization: "0.9"
+  cleanup: true
+  # VPC config for benchmark runner (AI Benchmark Job) to reach internal NLB
+  vpc_config:
+    SecurityGroupIds: [<HYPERPOD_SG>, <EKS_NODE_SG>]
+    Subnets: [<SUBNET_1>, <SUBNET_2>, <SUBNET_3>]
+
+hyperpod_benchmarks:
+  - model: gemma-4-31b-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling, long_context_scaling, production_traffic_mix, shared_system_prompt]
+
+  - model: deepseek-v4-pro-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling, long_context_scaling, production_traffic_mix, shared_system_prompt]
+
+# ---------------------------------------------------------------------------
+# Bedrock BYOM Defaults
+# ---------------------------------------------------------------------------
+byom_defaults:
+  region: <REGION>
+  role_arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+  s3_output: s3://sagemaker-benchmark-{region}-<ACCOUNT_ID>/byom
+  mantle_endpoint: https://bedrock.<REGION>.amazonaws.com
+  ru_count: 1
+  processing_instance_type: ml.m7i.4xlarge
+  processing_volume_gb: 500
+
+# BYOM benchmarks reference the same models section (byom: sub-key)
+byom_benchmarks:
+  - model: gemma-4-31b-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling]
+
+  - model: deepseek-v4-pro-vllm
+    workloads: [multi_turn_chat, rag_document_qa, agent_tool_calling]
