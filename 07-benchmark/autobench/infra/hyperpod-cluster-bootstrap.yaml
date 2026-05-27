@@ -1,0 +1,638 @@
+# ============================================================================
+# SageMaker HyperPod EKS Cluster Bootstrap
+# ============================================================================
+#
+# Deploys a fully-configured HyperPod cluster with networking ready for GPU
+# benchmarking workloads. Creates VPC, subnets (NLB-tagged), security groups
+# (port 80 + NodePort range), IAM roles, and the cluster itself.
+#
+# DEPLOYMENT:
+#   aws cloudformation deploy \
+#     --template-file hyperpod-cluster-bootstrap.yaml \
+#     --stack-name sagemaker-benchmark-hyperpod \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --region us-east-2
+#
+# POST-DEPLOYMENT:
+#
+#   1. Get the EKS cluster name (auto-created by HyperPod):
+#      aws sagemaker describe-cluster --cluster-name <ClusterName> --region us-east-2 \
+#        --query 'Orchestrator.Eks.ClusterArn' --output text
+#
+#   2. Configure kubectl:
+#      EKS_NAME=$(aws sagemaker describe-cluster --cluster-name <ClusterName> \
+#        --query 'Orchestrator.Eks.ClusterArn' --output text | awk -F/ '{print $NF}')
+#      aws eks update-kubeconfig --name $EKS_NAME --region us-east-2
+#
+#   3. Install AWS Load Balancer Controller:
+#      # Add the EKS Helm repo
+#      helm repo add eks https://aws.github.io/eks-charts
+#      helm repo update
+#
+#      # Install the controller (use the LBControllerRoleArn from stack outputs)
+#      helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+#        -n kube-system \
+#        --set clusterName=$EKS_NAME \
+#        --set serviceAccount.create=true \
+#        --set serviceAccount.name=aws-load-balancer-controller \
+#        --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=<LBControllerRoleArn> \
+#        --set region=us-east-2 \
+#        --set vpcId=<VpcId from outputs>
+#
+#   4. Add GPU node groups via Training Plan (FTP):
+#      GPU nodes are added by attaching an FTP-backed node group to the cluster.
+#      This is done via the SageMaker console or CLI, not CloudFormation.
+#      The node group will use the NodeSecurityGroup and private subnets from this stack.
+#
+#   5. Update benchmarks.yaml with the stack outputs:
+#      hyperpod_defaults:
+#        hyperpod_cluster_name: "<ClusterName>"
+#        vpc_config:
+#          SecurityGroupIds: [<NodeSecurityGroupId>, <BenchmarkSecurityGroupId>]
+#          Subnets: [<PrivateSubnet1>, <PrivateSubnet2>, <PrivateSubnet3>]
+#
+# ============================================================================
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  SageMaker HyperPod EKS cluster bootstrap for GPU benchmarking.
+  Creates VPC, subnets, security groups, IAM roles, and cluster.
+  Region-portable (uses AWS::Region). Default target: us-east-2.
+
+# ============================================================================
+# Parameters
+# ============================================================================
+Parameters:
+  ClusterName:
+    Type: String
+    Default: sagemaker-<CLUSTER_NAME>
+    Description: Name for the SageMaker HyperPod cluster
+
+  BenchmarkBucketName:
+    Type: String
+    Default: sagemaker-benchmark-us-east-2-<ACCOUNT_ID>
+    Description: S3 bucket for benchmark results and model weights
+
+  VpcCidr:
+    Type: String
+    Default: '10.0.0.0/16'
+    Description: CIDR block for the VPC
+
+  DefaultNodeInstanceType:
+    Type: String
+    Default: ml.t3.medium
+    Description: Instance type for the default (non-GPU) node group
+
+  DefaultNodeCount:
+    Type: Number
+    Default: 1
+    Description: Number of nodes in the default node group
+
+# ============================================================================
+# Resources
+# ============================================================================
+Resources:
+
+  # --------------------------------------------------------------------------
+  # VPC + Networking
+  # --------------------------------------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-igw'
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public subnets (for NAT Gateway)
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-public-1'
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.2.0/24'
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-public-2'
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.3.0/24'
+      AvailabilityZone: !Select [2, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-public-3'
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+
+  # Private subnets (for EKS nodes + internal NLB)
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.10.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-private-1'
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.11.0/24'
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-private-2'
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.12.0/24'
+      AvailabilityZone: !Select [2, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-private-3'
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+
+  # NAT Gateway (single, in first public subnet)
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-nat-eip'
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-nat'
+
+  # Route tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-public-rt'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet3RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-private-rt'
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet3RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable
+
+  # --------------------------------------------------------------------------
+  # Security Groups
+  # --------------------------------------------------------------------------
+
+  # EKS Cluster Security Group (control plane)
+  ClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS cluster control plane security group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-cluster-sg'
+
+  # Node Security Group (HyperPod EKS nodes)
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for HyperPod EKS nodes
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-node-sg'
+
+  # Node SG: Allow all traffic from self (node-to-node)
+  NodeSGIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Node-to-node communication
+
+  # Node SG: Allow port 80 from cluster SG (NLB health checks + traffic)
+  NodeSGIngressPort80:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref ClusterSecurityGroup
+      Description: NLB health checks and traffic from cluster SG
+
+  # Node SG: Allow NodePort range from VPC CIDR (NLB -> Pod routing)
+  NodeSGIngressNodePorts:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 30000
+      ToPort: 32767
+      CidrIp: '10.0.0.0/8'
+      Description: NodePort range for NLB to Pod routing
+
+  # Node SG: Allow traffic from cluster control plane
+  NodeSGIngressFromCluster:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref ClusterSecurityGroup
+      Description: Cluster control plane to nodes
+
+  # Node SG: Allow port 443 from cluster (for kubelet)
+  NodeSGIngressKubelet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref ClusterSecurityGroup
+      Description: Cluster to node kubelet
+
+  # Cluster SG: Allow traffic from nodes
+  ClusterSGIngressFromNodes:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ClusterSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Nodes to cluster API server
+
+  # Benchmark Security Group (for Processing Jobs / AIPerf load generator)
+  BenchmarkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for benchmark Processing Jobs (AIPerf)
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+          Description: Allow all outbound (needs to reach NLB)
+      Tags:
+        - Key: Name
+          Value: !Sub '${ClusterName}-benchmark-sg'
+
+  # --------------------------------------------------------------------------
+  # IAM Roles
+  # --------------------------------------------------------------------------
+
+  # HyperPod Cluster Execution Role
+  HyperPodExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy
+      Policies:
+        - PolicyName: HyperPodEKSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - eks:*
+                  - ec2:Describe*
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
+                  - ec2:CreateTags
+                  - elasticloadbalancing:*
+                  - iam:CreateServiceLinkedRole
+                  - iam:PassRole
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BenchmarkBucketName}'
+                  - !Sub 'arn:aws:s3:::${BenchmarkBucketName}/*'
+
+  # Node Instance Role (for EKS worker nodes)
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-node-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: BenchmarkS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BenchmarkBucketName}'
+                  - !Sub 'arn:aws:s3:::${BenchmarkBucketName}/*'
+
+  # AWS Load Balancer Controller IAM Policy
+  LBControllerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${ClusterName}-lb-controller-policy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
+          - Effect: Allow
+            Action:
+              - ec2:Describe*
+              - ec2:GetCoipPoolUsage
+              - ec2:DescribeCoipPools
+              - elasticloadbalancing:*
+              - cognito-idp:DescribeUserPoolClient
+              - acm:ListCertificates
+              - acm:DescribeCertificate
+              - iam:ListServerCertificates
+              - iam:GetServerCertificate
+              - waf-regional:*
+              - wafv2:*
+              - shield:*
+              - tag:GetResources
+              - tag:TagResources
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:CreateSecurityGroup
+              - ec2:DeleteSecurityGroup
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: '*'
+
+  # Load Balancer Controller IRSA Role
+  # NOTE: The OIDC provider URL must be updated post-deployment once the EKS
+  # cluster is created. This role uses a placeholder condition.
+  LBControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-lb-controller-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            # NOTE: Update the Condition below with the actual OIDC provider ID
+            # after the cluster is created. Get it with:
+            #   aws eks describe-cluster --name <EKS_NAME> \
+            #     --query "cluster.identity.oidc.issuer" --output text
+            Condition:
+              StringEquals:
+                'oidc.eks.${AWS::Region}.amazonaws.com:sub': 'system:serviceaccount:kube-system:aws-load-balancer-controller'
+      ManagedPolicyArns:
+        - !Ref LBControllerPolicy
+
+  # --------------------------------------------------------------------------
+  # SageMaker HyperPod Cluster
+  # --------------------------------------------------------------------------
+  HyperPodCluster:
+    Type: AWS::SageMaker::Cluster
+    DependsOn:
+      - PrivateSubnet1RouteTableAssoc
+      - PrivateSubnet2RouteTableAssoc
+      - PrivateSubnet3RouteTableAssoc
+      - NatGateway
+    Properties:
+      ClusterName: !Ref ClusterName
+      Orchestrator:
+        Eks:
+          ClusterArn: !Sub 'arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref NodeSecurityGroup
+          - !Ref ClusterSecurityGroup
+        Subnets:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+          - !Ref PrivateSubnet3
+      InstanceGroups:
+        - InstanceGroupName: default-system
+          InstanceType: !Ref DefaultNodeInstanceType
+          InstanceCount: !Ref DefaultNodeCount
+          LifeCycleConfig:
+            SourceS3Uri: !Sub 's3://${BenchmarkBucketName}/hyperpod-lifecycle/'
+            OnCreate: on_create.sh
+          ExecutionRole: !GetAtt HyperPodExecutionRole.Arn
+      Tags:
+        - Key: project
+          Value: benchmarking-initiative
+        - Key: managed-by
+          Value: cloudformation
+
+# ============================================================================
+# Outputs
+# ============================================================================
+Outputs:
+  ClusterName:
+    Description: SageMaker HyperPod cluster name
+    Value: !Ref ClusterName
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterName'
+
+  VpcId:
+    Description: VPC ID (for benchmarks.yaml and Helm install)
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
+
+  PrivateSubnetIds:
+    Description: Private subnet IDs (comma-separated, for benchmarks.yaml vpc_config.Subnets)
+    Value: !Join
+      - ','
+      - - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        - !Ref PrivateSubnet3
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetIds'
+
+  NodeSecurityGroupId:
+    Description: Node security group ID (for benchmarks.yaml vpc_config.SecurityGroupIds)
+    Value: !Ref NodeSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-NodeSecurityGroupId'
+
+  BenchmarkSecurityGroupId:
+    Description: Benchmark SG ID (for benchmarks.yaml vpc_config.SecurityGroupIds)
+    Value: !Ref BenchmarkSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-BenchmarkSecurityGroupId'
+
+  ClusterSecurityGroupId:
+    Description: EKS cluster control plane security group
+    Value: !Ref ClusterSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterSecurityGroupId'
+
+  HyperPodExecutionRoleArn:
+    Description: HyperPod execution role ARN
+    Value: !GetAtt HyperPodExecutionRole.Arn
+
+  NodeInstanceRoleArn:
+    Description: Node instance role ARN
+    Value: !GetAtt NodeInstanceRole.Arn
+
+  LBControllerRoleArn:
+    Description: >-
+      IAM role ARN for AWS Load Balancer Controller (use in Helm install).
+      NOTE: Update the OIDC trust policy after cluster creation.
+    Value: !GetAtt LBControllerRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LBControllerRoleArn'
+
+  KubectlCommand:
+    Description: Command to configure kubectl (replace EKS_NAME after cluster creation)
+    Value: !Sub >-
+      aws eks update-kubeconfig --name <EKS_NAME> --region ${AWS::Region}
+
+  BenchmarksYamlVpcConfig:
+    Description: Copy-paste this into benchmarks.yaml hyperpod_defaults.vpc_config
+    Value: !Sub |
+      vpc_config:
+        SecurityGroupIds: ["${NodeSecurityGroup}", "${BenchmarkSecurityGroup}"]
+        Subnets: ["${PrivateSubnet1}", "${PrivateSubnet2}", "${PrivateSubnet3}"]
