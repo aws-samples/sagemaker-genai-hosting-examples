@@ -63,6 +63,10 @@ def main():
     parser.add_argument("--region", default="us-east-2")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print what would be written without writing")
+    parser.add_argument("--since", default=None,
+                        help="Only process tarballs with timestamp >= this value (format: 20260527 or 20260527T100000)")
+    parser.add_argument("--latest-only", action="store_true",
+                        help="For each (workload, concurrency) combo, only process the most recent tarball (skips older/failed runs)")
     args = parser.parse_args()
 
     # Load config
@@ -86,9 +90,9 @@ def main():
         print(f"\n{'─'*60}")
         print(f"[backfill] {model_key}")
         print(f"{'─'*60}")
-        _backfill_model(model_key, args.environment, args.region, args.dry_run, args.config, local_config)
+        _backfill_model(model_key, args.environment, args.region, args.dry_run, args.config, local_config, since=args.since, latest_only=args.latest_only)
 
-def _backfill_model(model_key, environment, region, dry_run, config_path, local_config):
+def _backfill_model(model_key, environment, region, dry_run, config_path, local_config, since=None, latest_only=False):
     """Backfill a single model's results."""
     models_key = "byom_models" if environment == "byom" else "models"
     model_cfg = local_config.get(models_key, {}).get(model_key)
@@ -125,6 +129,39 @@ def _backfill_model(model_key, environment, region, dry_run, config_path, local_
         return
 
     print(f"Found {len(tarballs)} tarballs for {model_key}")
+
+    # --since filter: drop tarballs older than the specified timestamp
+    if since:
+        filtered = []
+        for key in tarballs:
+            parts = key.split("/")
+            try:
+                model_idx = parts.index(model_key)
+                ts = parts[model_idx + 3] if len(parts) > model_idx + 3 else ""
+            except (ValueError, IndexError):
+                ts = ""
+            if ts >= since:
+                filtered.append(key)
+        print(f"  --since {since}: {len(tarballs)} → {len(filtered)} tarballs")
+        tarballs = filtered
+
+    # --latest-only filter: for each (workload, concurrency) combo, keep only the newest tarball
+    if latest_only:
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for key in tarballs:
+            parts = key.split("/")
+            try:
+                model_idx = parts.index(model_key)
+                wl = parts[model_idx + 1]
+                conc_part = parts[model_idx + 2]
+                ts = parts[model_idx + 3] if len(parts) > model_idx + 3 else ""
+                groups[(wl, conc_part)].append((ts, key))
+            except (ValueError, IndexError):
+                groups[("unknown", "unknown")].append(("", key))
+        # Keep only the latest (max timestamp) per group
+        tarballs = [max(entries, key=lambda x: x[0])[1] for entries in groups.values()]
+        print(f"  --latest-only: keeping {len(tarballs)} latest tarballs (1 per workload×concurrency)")
 
     # Track config loading (cache across jobs with same config)
     s3_config_cache = {}

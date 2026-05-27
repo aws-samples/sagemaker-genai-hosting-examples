@@ -126,6 +126,39 @@ All scripts support `--help` for full usage. Common flags:
 --cleanup           # Delete deployed resources
 ```
 
+### Backfill Options
+
+Re-process historical benchmark results from S3 tarballs:
+
+```bash
+# Backfill all models for an environment
+python backfill.py --environment=managed-inference
+
+# Backfill a specific model
+python backfill.py --environment=hyperpod --model=deepseek-v4-pro-vllm
+
+# Only process results from a specific date onward
+python backfill.py --environment=hyperpod --since=20260527
+
+# Only keep the latest run per (workload × concurrency) — skips old/failed runs
+python backfill.py --environment=hyperpod --latest-only
+
+# Combine both: latest results from this week only
+python backfill.py --environment=managed-inference --latest-only --since=20260525
+
+# Preview without writing
+python backfill.py --environment=hyperpod --dry-run
+```
+
+| Flag | Effect |
+|------|--------|
+| `--since YYYYMMDD[THHMMSS]` | Only process tarballs with path timestamp ≥ this value |
+| `--latest-only` | For each (workload, concurrency) combo, only process the most recent tarball |
+| `--dry-run` | Preview what would be written without writing to Athena |
+| `--model` | Filter to a specific model key |
+| `--config` | Path to benchmarks.yaml (default: ../benchmarks.yaml) |
+
+
 ## Infrastructure
 
 For automated HyperPod cluster setup with pre-configured networking (security groups, NLB subnet tags, IRSA), see [`infra/hyperpod-cluster-bootstrap.yaml`](infra/hyperpod-cluster-bootstrap.yaml).
