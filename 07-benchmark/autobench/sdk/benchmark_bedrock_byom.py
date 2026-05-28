@@ -270,6 +270,12 @@ def run_byom_benchmark(client, job, defaults, secret_arn):
         },
         "secrets": {"api_key": secret_arn},
     }
+    # Only set public_dataset if a real dataset is specified (not "synthetic" or empty)
+    dataset = job.get("dataset")
+    if dataset and dataset.lower() != "synthetic":
+        workload_spec["parameters"]["public_dataset"] = dataset
+
+    workload_spec["parameters"]["extra_inputs"] = "ignore_eos:true temperature:0"
 
     # Create workload config
     try:

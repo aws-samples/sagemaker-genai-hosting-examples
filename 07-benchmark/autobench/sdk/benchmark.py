@@ -432,7 +432,8 @@ def run_benchmark_job(client, job, ep_name, defaults, models=None):
         },
         "tooling": {"api_standard": "openai"},
     }
-    if job.get("dataset"):
+    # Only set public_dataset if a real dataset is specified (not "synthetic" or empty)
+    if job.get("dataset") and job["dataset"].lower() != "synthetic":
         workload_spec["parameters"]["public_dataset"] = job["dataset"]
 
     hf_secret = os.environ.get("HF_TOKEN_SECRET_ARN")
