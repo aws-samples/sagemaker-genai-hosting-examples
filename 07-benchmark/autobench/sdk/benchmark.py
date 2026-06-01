@@ -319,8 +319,11 @@ def deploy_model(client, model_key, model_cfg, defaults):
     try:
         waiter.wait(EndpointName=ep_name, WaiterConfig={"Delay": 30, "MaxAttempts": 60})
     except Exception as e:
-        status = client.describe_endpoint(EndpointName=ep_name)["EndpointStatus"]
-        return {"success": False, "error": f"Endpoint stuck in {status}: {e}"}
+        try:
+            status = client.describe_endpoint(EndpointName=ep_name)["EndpointStatus"]
+        except Exception:
+            status = "Unknown"
+        return {"success": False, "status": status, "error": f"Endpoint reached {status}: {e}"}
 
     print(f"  ✓ Endpoint InService: {ep_name}")
     return {"success": True, "endpoint": ep_name, "model_name": sm_model_name}
@@ -432,7 +435,8 @@ def run_benchmark_job(client, job, ep_name, defaults, models=None):
         },
         "tooling": {"api_standard": "openai"},
     }
-    if job.get("dataset"):
+    # Only set public_dataset if a real dataset is specified (not "synthetic" or empty)
+    if job.get("dataset") and job["dataset"].lower() != "synthetic":
         workload_spec["parameters"]["public_dataset"] = job["dataset"]
 
     hf_secret = os.environ.get("HF_TOKEN_SECRET_ARN")
@@ -595,6 +599,28 @@ def cleanup_model(client, model_key):
         print(f"  ✓ Deleted model: {sm_model_name}")
     except Exception:
         pass
+
+
+def wait_for_endpoint_deleted(client, ep_name, timeout=300):
+    """Wait for endpoint to be fully deleted before releasing FTP capacity."""
+    print(f"  ⏳ Waiting for endpoint deletion to complete...")
+    for i in range(timeout // 15):
+        try:
+            resp = client.describe_endpoint(EndpointName=ep_name)
+            status = resp["EndpointStatus"]
+            if status == "Deleting":
+                time.sleep(15)
+                continue
+            # Still exists in non-Deleting state — unexpected
+            time.sleep(15)
+        except client.exceptions.ClientError as e:
+            if "Could not find endpoint" in str(e) or "ValidationException" in str(e):
+                print(f"  ✓ Endpoint deleted: {ep_name}")
+                return
+            time.sleep(15)
+        except Exception:
+            time.sleep(15)
+    print(f"  ⚠️  Endpoint deletion not confirmed after {timeout}s — proceeding")
 
 
 def wait_for_ftp_available(client, defaults):
@@ -831,11 +857,12 @@ resume: re-run safely — completed jobs are skipped automatically
             if not deploy_result["success"]:
                 gap = classify_gap(deploy_result.get("error", ""))
                 gaps.append({"model": model_key, "step": "deploy", **gap})
-                print(f"  ✗ Deploy failed — skipping all workloads for {model_key}")
+                print(f"  ✗ Deploy failed ({deploy_result.get('status', 'unknown')}) — skipping all workloads for {model_key}")
                 for j in model_jobs:
                     results.append({"id": j["id"], "status": "skipped", "reason": deploy_result["error"]})
-                # Cleanup failed endpoint before moving to next model
+                # Always cleanup failed endpoint and wait for FTP before next model
                 cleanup_model(client, model_key)
+                wait_for_endpoint_deleted(client, endpoint_name(model_key))
                 wait_for_ftp_available(client, config.get("sagemaker_defaults", {}))
                 continue
             ep_name_val = endpoint_name(model_key)
@@ -870,6 +897,7 @@ resume: re-run safely — completed jobs are skipped automatically
         # Cleanup after all workloads for this model (required for single-instance FTP)
         if config.get("sagemaker_defaults", {}).get("cleanup", False) and not args.benchmark_only and not args.endpoint:
             cleanup_model(client, model_key)
+            wait_for_endpoint_deleted(client, endpoint_name(model_key))
             wait_for_ftp_available(client, config.get("sagemaker_defaults", {}))
 
     # Write summary

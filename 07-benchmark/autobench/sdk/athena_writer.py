@@ -166,19 +166,26 @@ def _compute_error_rate(aiperf):
 
 
 def _compute_job_id(record):
-    """Compute a deterministic job_id that uniquely identifies a benchmark run.
+    """Compute a deterministic job_id that uniquely identifies a benchmark data point.
 
-    Same model + workload + concurrency + config = same job_id = same S3 key.
-    Re-runs overwrite the previous record. No duplicates.
+    Identifies the logical measurement: same model + environment + workload +
+    concurrency + token lengths + dataset = same data point = same S3 key.
+    Re-running the same benchmark overwrites the previous record (no duplicates).
+
+    Does NOT include serving_config — that blob is an audit trail which may vary
+    between runs of the same logical benchmark (e.g. DLC image tag updates, new
+    env vars added to config). Including it caused duplicate records when configs
+    were edited between runs or between live writes and backfills.
     """
     unique_factors = json.dumps({
+        "model_key": record.get("model_key"),
+        "environment": record.get("environment"),
         "concurrency": record.get("concurrency"),
         "input_tokens": record.get("input_tokens"),
         "output_tokens": record.get("output_tokens"),
         "dataset": record.get("dataset"),
-        "serving_config": record.get("serving_config", ""),
     }, sort_keys=True)
-    run_hash = hashlib.sha256(unique_factors.encode()).hexdigest()[:8]
+    run_hash = hashlib.sha256(unique_factors.encode()).hexdigest()[:12]
 
     model_key = record.get("model_key", "unknown")
     workload = record.get("workload", "unknown")
@@ -285,8 +292,10 @@ def flatten_metrics(aiperf):
     # Dataset — extracted from input_config
     input_config = aiperf.get("input_config", {})
     aiperf_dataset = input_config.get("input", {}).get("public_dataset")
-    if aiperf_dataset:
+    if aiperf_dataset and aiperf_dataset.lower() != "synthetic":
         m["dataset"] = aiperf_dataset  # AIPerf's actual dataset takes precedence (runtime truth)
+    else:
+        m["dataset"] = "synthetic"  # No dataset specified or explicitly synthetic
 
     # Raw JSON blob — full AIPerf output for ad-hoc Athena queries
     # Exclude large objects (input_config contains resolved prompts metadata,
