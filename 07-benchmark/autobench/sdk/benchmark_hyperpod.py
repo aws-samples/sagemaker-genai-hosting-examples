@@ -159,6 +159,7 @@ def expand_hyperpod_jobs(config, model_filter=None, workload_filter=None):
                     "id": f"hp-{model_key}--{wl_name}--c{concurrency}",
                     "model_key": model_key,
                     "model_name": model["model_name"],
+                    "benchmark_tokenizer": model.get("benchmark_tokenizer"),
                     "num_gpus": model.get("num_gpus", 8),
                     "workload_key": wl_name,
                     "concurrency": concurrency,
@@ -273,13 +274,13 @@ def deploy_model_k8s(model_key, model_cfg, defaults):
     gpu_memory_utilization = str(vllm_config.get("gpu_memory_utilization", "0.9"))
     # Per-model vLLM CLI args for HyperPod (EC2 image doesn't have SM_VLLM_* translation)
     extra_args = model_cfg.get("hyperpod_args", [])
-    # Format extra args as YAML list items for the manifest template
-    extra_args_yaml = "\n".join(f'            - "{arg}"' for arg in extra_args) if extra_args else ""
+    # Format extra args as YAML list items — use single quotes to avoid JSON brace/quote conflicts
+    extra_args_yaml = "\n".join(f"            - '{arg}'" for arg in extra_args) if extra_args else ""
 
     # Per-model env vars for HyperPod pod (e.g., VLLM_USE_FLASHINFER_MOE_FP4)
     hyperpod_env = model_cfg.get("hyperpod_env", {})
     extra_env_yaml = "\n".join(
-        f'            - name: {k}\n              value: "{v}"' for k, v in hyperpod_env.items()
+        f"            - name: {k}\n              value: '{v}'" for k, v in hyperpod_env.items()
     ) if hyperpod_env else ""
 
     # K8s node label uses the full instance type (including ml. prefix on HyperPod)
@@ -439,7 +440,7 @@ def run_hyperpod_benchmark(client, job, elb_url, defaults, models=None):
         "parameters": {
             "url": elb_url,
             "model": job["model_name"],
-            "tokenizer": job["model_name"],
+            "tokenizer": job.get("benchmark_tokenizer") or job["model_name"],
             "concurrency": job["concurrency"],
             "streaming": job["streaming"],
             "prompt_input_tokens_mean": job["input_tokens"],
