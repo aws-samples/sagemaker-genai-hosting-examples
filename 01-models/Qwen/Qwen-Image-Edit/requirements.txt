@@ -1,4 +1,4 @@
 git+https://github.com/huggingface/diffusers.git
-transformers==4.57.3
+transformers==5.5.0
 accelerate==1.12.0
 peft==0.17.1
