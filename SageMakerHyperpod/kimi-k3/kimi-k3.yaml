@@ -1,0 +1,48 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: InferenceEndpointConfig
+metadata:
+  name: kimik3
+spec:
+  modelName: Kimi-K3
+  instanceType: ml.p6-b300.48xlarge
+  invocationEndpoint: v1/chat/completions
+  replicas: 1
+  modelSourceConfig:
+    huggingFaceModel:
+      modelId: moonshotai/Kimi-K3
+    modelSourceType: huggingface
+  worker:
+    image: vllm/vllm-openai:kimi-k3
+    modelInvocationPort:
+      containerPort: 8000
+      name: http
+    modelVolumeMount:
+      mountPath: /opt/ml/model
+      name: model-weights
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+      requests:
+        nvidia.com/gpu: 8
+    args:
+      - "--model"
+      - "moonshotai/Kimi-K3"
+      - "--trust-remote-code"
+      - "--load-format"
+      - "fastsafetensors"
+      - "--enable-prefix-caching"
+      - "--enable-auto-tool-choice"
+      - "--tool-call-parser"
+      - "kimi_k3"
+      - "--reasoning-parser"
+      - "kimi_k3"
+      - "--served-model-name"
+      - "Kimi-K3"
+      - "--moe-backend"
+      - "auto"
+      - "--tensor-parallel-size"
+      - "8"
+      - "--no-enable-flashinfer-autotune"
+    environmentVariables:
+      - name: "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION"
+        value: "1"
