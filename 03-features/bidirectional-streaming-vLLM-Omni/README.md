@@ -22,10 +22,12 @@ and chunk events over the same connection.
 - Python 3.12 or newer
 - AWS credentials configured through an AWS profile, IAM Identity Center, or
   an IAM role
+- Boto3 1.40 or newer, installed by `requirements.txt`
 - A SageMaker execution role
 - Permission to create, invoke, and delete SageMaker models, endpoint
   configurations, and endpoints
-- `ml.g6.xlarge` capacity in `us-east-1`, or another supported AWS Region
+- Endpoint quota for at least one of `ml.g6.xlarge`, `ml.g6e.xlarge`,
+  `ml.g5.xlarge`, or `ml.g4dn.xlarge`
 
 The sample creates a GPU endpoint that incurs charges while it is running.
 Its cleanup routine waits for endpoint deletion before deleting the endpoint
@@ -61,17 +63,31 @@ python deploy_bidi_stream.py \
   --keep-endpoint
 ```
 
-The default Region is `us-east-1`. Override the Region or container image
-when required.
+The default Region is `us-east-1`. Use `--region` to deploy elsewhere. The
+script builds the regional container image URI automatically.
 
 ```bash
-export AWS_REGION="us-west-2"
-export VLLM_OMNI_IMAGE_URI="763104351884.dkr.ecr.us-west-2.amazonaws.com/vllm:omni-sagemaker-cuda-v1.5"
-python deploy_bidi_stream.py
+python deploy_bidi_stream.py --region us-west-2
 ```
 
 A successful run reports `audio.start` and `audio.done`, receives more than
 2,000 streamed PCM bytes, and saves `validation-output.wav`.
+
+### Instance pools
+
+The endpoint configuration uses a SageMaker instance pool instead of one
+fixed instance type. SageMaker tries the compatible GPU types in this order:
+
+1. `ml.g6.xlarge`
+2. `ml.g6e.xlarge`
+3. `ml.g5.xlarge`
+4. `ml.g4dn.xlarge`
+
+SageMaker still provisions one instance. If the preferred type has
+insufficient capacity, it tries the next type without requiring a new
+endpoint deployment. Request quota for every fallback type that you want
+SageMaker to use. The hourly price can change when SageMaker selects a
+different instance type.
 
 ## Try the Gradio application
 
@@ -94,6 +110,7 @@ Delete the endpoint, endpoint configuration, and model after testing.
 ```bash
 python deploy_bidi_stream.py \
   --endpoint-name vllm-omni-bidi \
+  --region us-east-1 \
   --delete-endpoint
 ```
 

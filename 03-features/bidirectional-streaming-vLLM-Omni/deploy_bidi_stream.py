@@ -23,24 +23,23 @@ import wave
 
 import boto3
 from botocore.exceptions import ClientError
-from sagemaker.core.resources import Endpoint, EndpointConfig, Model
-from sagemaker.core.shapes import ContainerDefinition, ProductionVariant
 from sagemaker_bidi_tts import collect_pcm
 
 logger = logging.getLogger(__name__)
 
-REGION = os.environ.get("AWS_REGION", "us-east-1")
-IMAGE_URI = os.environ.get(
-    "VLLM_OMNI_IMAGE_URI",
-    (f"763104351884.dkr.ecr.{REGION}.amazonaws.com/vllm:omni-sagemaker-cuda-v1.5"),
-)
 EXECUTION_ROLE_ARN = os.environ.get(
     "SAGEMAKER_EXECUTION_ROLE_ARN",
     "arn:aws:iam::<account-id>:role/<sagemaker-execution-role>",
 )
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
-INSTANCE_TYPE = "ml.g6.xlarge"
+INSTANCE_TYPES = (
+    "ml.g6.xlarge",
+    "ml.g6e.xlarge",
+    "ml.g5.xlarge",
+    "ml.g4dn.xlarge",
+)
 INFERENCE_AMI_VERSION = "al2023-ami-sagemaker-inference-gpu-4-1"
+INSTANCE_PROVISION_TIMEOUT_SECONDS = 1200
 
 
 def validate_configuration():
@@ -60,9 +59,39 @@ def save_wav(path, pcm, sample_rate):
         output.writeframes(pcm)
 
 
-def delete_resources(resource_name):
+def image_uri(region):
+    """Return the regional vLLM-Omni DLC image URI."""
+    return os.environ.get(
+        "VLLM_OMNI_IMAGE_URI",
+        (f"763104351884.dkr.ecr.{region}.amazonaws.com/vllm:omni-sagemaker-cuda-v1.5"),
+    )
+
+
+def instance_pools():
+    """Return compatible GPU instance types in placement priority order."""
+    return [
+        {"InstanceType": instance_type, "Priority": priority}
+        for priority, instance_type in enumerate(INSTANCE_TYPES, start=1)
+    ]
+
+
+def production_variant(resource_name):
+    """Build the endpoint production variant with capacity fallbacks."""
+    return {
+        "VariantName": "AllTraffic",
+        "ModelName": resource_name,
+        "InitialInstanceCount": 1,
+        "InstancePools": instance_pools(),
+        "VariantInstanceProvisionTimeoutInSeconds": (
+            INSTANCE_PROVISION_TIMEOUT_SECONDS
+        ),
+        "InferenceAmiVersion": INFERENCE_AMI_VERSION,
+    }
+
+
+def delete_resources(resource_name, region):
     """Delete an endpoint, endpoint configuration, and model by name."""
-    sagemaker = boto3.client("sagemaker", region_name=REGION)
+    sagemaker = boto3.client("sagemaker", region_name=region)
     try:
         sagemaker.delete_endpoint(EndpointName=resource_name)
         sagemaker.get_waiter("endpoint_deleted").wait(
@@ -98,6 +127,10 @@ def main():
     """Deploy the endpoint, run one streaming request, and clean up."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint-name")
+    parser.add_argument(
+        "--region",
+        default=os.environ.get("AWS_REGION", "us-east-1"),
+    )
     parser.add_argument("--keep-endpoint", action="store_true")
     parser.add_argument("--delete-endpoint", action="store_true")
     parser.add_argument(
@@ -113,58 +146,59 @@ def main():
     if args.delete_endpoint:
         if not args.endpoint_name:
             parser.error("--delete-endpoint requires --endpoint-name")
-        delete_resources(resource_name)
+        delete_resources(resource_name, args.region)
         return
 
     validate_configuration()
+    region = args.region
+    regional_image_uri = image_uri(region)
     model_created = False
     endpoint_config_created = False
     endpoint_created = False
     validation_passed = False
 
     try:
-        print(f"Region: {REGION}")
-        print(f"Image: {IMAGE_URI}")
+        print(f"Region: {region}")
+        print(f"Image: {regional_image_uri}")
         print(f"Model: {MODEL_ID}")
-        print(f"Instance type: {INSTANCE_TYPE}")
-        Model.create(
-            model_name=resource_name,
-            primary_container=ContainerDefinition(
-                image=IMAGE_URI,
-                environment={"SM_VLLM_MODEL": MODEL_ID},
-            ),
-            execution_role_arn=EXECUTION_ROLE_ARN,
-            region=REGION,
+        print(f"Instance pools: {', '.join(INSTANCE_TYPES)}")
+        sagemaker = boto3.client("sagemaker", region_name=region)
+        sagemaker.create_model(
+            ModelName=resource_name,
+            PrimaryContainer={
+                "Image": regional_image_uri,
+                "Environment": {"SM_VLLM_MODEL": MODEL_ID},
+            },
+            ExecutionRoleArn=EXECUTION_ROLE_ARN,
         )
         model_created = True
-        EndpointConfig.create(
-            endpoint_config_name=resource_name,
-            region=REGION,
-            production_variants=[
-                ProductionVariant(
-                    variant_name="AllTraffic",
-                    model_name=resource_name,
-                    initial_instance_count=1,
-                    instance_type=INSTANCE_TYPE,
-                    inference_ami_version=INFERENCE_AMI_VERSION,
-                )
-            ],
+        sagemaker.create_endpoint_config(
+            EndpointConfigName=resource_name,
+            ProductionVariants=[production_variant(resource_name)],
         )
         endpoint_config_created = True
-        endpoint = Endpoint.create(
-            endpoint_name=resource_name,
-            endpoint_config_name=resource_name,
-            region=REGION,
+        sagemaker.create_endpoint(
+            EndpointName=resource_name,
+            EndpointConfigName=resource_name,
         )
         endpoint_created = True
         print(f"Deploying {resource_name}.")
-        endpoint.wait_for_status("InService", timeout=2400)
+        sagemaker.get_waiter("endpoint_in_service").wait(
+            EndpointName=resource_name,
+            WaiterConfig={"Delay": 30, "MaxAttempts": 80},
+        )
+        endpoint_description = sagemaker.describe_endpoint(EndpointName=resource_name)
+        selected_pools = endpoint_description["ProductionVariants"][0].get(
+            "InstancePools",
+            [],
+        )
+        print("Selected instance pools:", json.dumps(selected_pools, default=str))
 
         result = asyncio.run(
             collect_pcm(
                 resource_name,
                 args.text,
-                region=REGION,
+                region=region,
             )
         )
         audio_bytes = len(result["audio"])
@@ -191,15 +225,15 @@ def main():
             print(f"Kept endpoint: {resource_name}")
             print(
                 "Launch the UI with: python sagemaker_bidi_tts_client.py "
-                f"--endpoint-name {resource_name} --region {REGION}"
+                f"--endpoint-name {resource_name} --region {region}"
             )
             print(
                 "Delete resources with: python deploy_bidi_stream.py "
-                f"--endpoint-name {resource_name} --delete-endpoint"
+                f"--endpoint-name {resource_name} --region {region} --delete-endpoint"
             )
         elif model_created or endpoint_config_created or endpoint_created:
             try:
-                delete_resources(resource_name)
+                delete_resources(resource_name, region)
             except Exception as error:  # noqa: BLE001
                 logger.warning(
                     "Failed to delete %s: %s",
