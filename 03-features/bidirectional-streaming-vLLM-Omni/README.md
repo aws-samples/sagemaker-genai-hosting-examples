@@ -89,6 +89,15 @@ endpoint deployment. Request quota for every fallback type that you want
 SageMaker to use. The hourly price can change when SageMaker selects a
 different instance type.
 
+Use `--instance-types` to restrict the pool to instance types that have quota
+in your account or that meet your price and performance requirements.
+
+```bash
+python deploy_bidi_stream.py \
+  --region us-east-2 \
+  --instance-types ml.g6e.xlarge ml.g5.xlarge ml.g4dn.xlarge
+```
+
 ## Try the Gradio application
 
 Launch the application against the endpoint that you kept running.

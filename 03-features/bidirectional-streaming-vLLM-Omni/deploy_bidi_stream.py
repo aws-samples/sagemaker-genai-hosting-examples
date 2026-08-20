@@ -67,21 +67,21 @@ def image_uri(region):
     )
 
 
-def instance_pools():
+def instance_pools(instance_types=INSTANCE_TYPES):
     """Return compatible GPU instance types in placement priority order."""
     return [
         {"InstanceType": instance_type, "Priority": priority}
-        for priority, instance_type in enumerate(INSTANCE_TYPES, start=1)
+        for priority, instance_type in enumerate(instance_types, start=1)
     ]
 
 
-def production_variant(resource_name):
+def production_variant(resource_name, instance_types=INSTANCE_TYPES):
     """Build the endpoint production variant with capacity fallbacks."""
     return {
         "VariantName": "AllTraffic",
         "ModelName": resource_name,
         "InitialInstanceCount": 1,
-        "InstancePools": instance_pools(),
+        "InstancePools": instance_pools(instance_types),
         "VariantInstanceProvisionTimeoutInSeconds": (
             INSTANCE_PROVISION_TIMEOUT_SECONDS
         ),
@@ -131,6 +131,12 @@ def main():
         "--region",
         default=os.environ.get("AWS_REGION", "us-east-1"),
     )
+    parser.add_argument(
+        "--instance-types",
+        nargs="+",
+        default=list(INSTANCE_TYPES),
+        metavar="INSTANCE_TYPE",
+    )
     parser.add_argument("--keep-endpoint", action="store_true")
     parser.add_argument("--delete-endpoint", action="store_true")
     parser.add_argument(
@@ -151,6 +157,9 @@ def main():
 
     validate_configuration()
     region = args.region
+    selected_instance_types = tuple(dict.fromkeys(args.instance_types))
+    if not 1 <= len(selected_instance_types) <= 5:
+        parser.error("--instance-types requires between one and five unique values")
     regional_image_uri = image_uri(region)
     model_created = False
     endpoint_config_created = False
@@ -161,7 +170,7 @@ def main():
         print(f"Region: {region}")
         print(f"Image: {regional_image_uri}")
         print(f"Model: {MODEL_ID}")
-        print(f"Instance pools: {', '.join(INSTANCE_TYPES)}")
+        print(f"Instance pools: {', '.join(selected_instance_types)}")
         sagemaker = boto3.client("sagemaker", region_name=region)
         sagemaker.create_model(
             ModelName=resource_name,
@@ -174,7 +183,9 @@ def main():
         model_created = True
         sagemaker.create_endpoint_config(
             EndpointConfigName=resource_name,
-            ProductionVariants=[production_variant(resource_name)],
+            ProductionVariants=[
+                production_variant(resource_name, selected_instance_types)
+            ],
         )
         endpoint_config_created = True
         sagemaker.create_endpoint(
