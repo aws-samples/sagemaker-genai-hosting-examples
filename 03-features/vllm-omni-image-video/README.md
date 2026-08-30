@@ -71,6 +71,19 @@ The deployment script writes resource names to
 `.vllm_omni_media_state.json`. Keep this file until you finish generation and
 cleanup.
 
+If your local AWS credentials expire while SageMaker is starting an endpoint,
+refresh them and resume from the saved state:
+
+```bash
+python deploy.py \
+  --role-arn "$SAGEMAKER_ROLE_ARN" \
+  --region us-east-1 \
+  --resume
+```
+
+The resume path reuses resources that already exist and creates only the
+remaining resources.
+
 FLUX.2-klein uses a real-time endpoint because its response completes within a
 single invocation. Wan VACE uses SageMaker Asynchronous Inference because video
 generation can exceed the response window for real-time inference. The

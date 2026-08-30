@@ -89,6 +89,27 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
         def __init__(self):
             self.calls = {}
 
+        @staticmethod
+        def _missing(operation):
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "ValidationException",
+                        "Message": "resource not found",
+                    }
+                },
+                operation,
+            )
+
+        def describe_model(self, **kwargs):
+            self._missing("DescribeModel")
+
+        def describe_endpoint_config(self, **kwargs):
+            self._missing("DescribeEndpointConfig")
+
+        def describe_endpoint(self, **kwargs):
+            self._missing("DescribeEndpoint")
+
         def create_model(self, **kwargs):
             self.calls["model"] = kwargs
 
@@ -130,6 +151,49 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
         "EndpointName": "video-endpoint",
         "EndpointConfigName": "video-config",
     }
+
+
+def test_create_endpoint_reuses_existing_resources():
+    class FakeSageMaker:
+        def __init__(self):
+            self.create_calls = []
+
+        def describe_model(self, **kwargs):
+            return {"ModelName": kwargs["ModelName"]}
+
+        def describe_endpoint_config(self, **kwargs):
+            return {"EndpointConfigName": kwargs["EndpointConfigName"]}
+
+        def describe_endpoint(self, **kwargs):
+            return {
+                "EndpointName": kwargs["EndpointName"],
+                "EndpointStatus": "InService",
+            }
+
+        def create_model(self, **kwargs):
+            self.create_calls.append(("model", kwargs))
+
+        def create_endpoint_config(self, **kwargs):
+            self.create_calls.append(("config", kwargs))
+
+        def create_endpoint(self, **kwargs):
+            self.create_calls.append(("endpoint", kwargs))
+
+    client = FakeSageMaker()
+
+    create_endpoint(
+        client,
+        model_name="image-model",
+        endpoint_config_name="image-config",
+        endpoint_name="image-endpoint",
+        role_arn="arn:aws:iam::111122223333:role/SageMakerRole",
+        image_uri=container_image_uri("us-east-1"),
+        model_id="black-forest-labs/FLUX.2-klein-4B",
+        instance_type="ml.g6.xlarge",
+        startup_timeout_seconds=1800,
+    )
+
+    assert client.create_calls == []
 
 
 def test_submit_video_uploads_multipart_request_before_async_invocation():

@@ -18,6 +18,7 @@ from vllm_omni_media import (
     container_image_uri,
     create_endpoint,
     ensure_bucket,
+    load_state,
     save_state,
     wait_for_endpoint,
 )
@@ -45,6 +46,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-instance-type", default="ml.g6.xlarge")
     parser.add_argument("--video-instance-type", default="ml.g6e.xlarge")
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the deployment recorded in --state-file.",
+    )
+    parser.add_argument(
         "--state-file",
         type=Path,
         default=DEFAULT_STATE_PATH,
@@ -55,37 +61,56 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     session = boto3.Session(region_name=args.region)
-    sts = session.client("sts")
-    account_id = sts.get_caller_identity()["Account"]
-    bucket = args.bucket or f"sagemaker-{args.region}-{account_id}"
     sagemaker = session.client("sagemaker")
     s3 = session.client("s3")
+
+    if args.resume:
+        state = load_state(args.state_file)
+        if state.region != args.region:
+            raise ValueError(
+                f"State file uses {state.region}, but --region is {args.region}."
+            )
+        bucket = state.bucket
+        print(f"Resuming deployment from {args.state_file}")
+    else:
+        if args.state_file.exists():
+            raise FileExistsError(
+                f"State file already exists at {args.state_file}. "
+                "Use --resume or remove it after cleanup."
+            )
+        sts = session.client("sts")
+        account_id = sts.get_caller_identity()["Account"]
+        bucket = args.bucket or f"sagemaker-{args.region}-{account_id}"
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        state = DeploymentState(
+            region=args.region,
+            bucket=bucket,
+            prefix=args.prefix.strip("/"),
+            image_model_name=resource_name(
+                args.name_prefix, "image-model", timestamp
+            ),
+            image_endpoint_config_name=resource_name(
+                args.name_prefix, "image-config", timestamp
+            ),
+            image_endpoint_name=resource_name(
+                args.name_prefix, "image-endpoint", timestamp
+            ),
+            video_model_name=resource_name(
+                args.name_prefix, "video-model", timestamp
+            ),
+            video_endpoint_config_name=resource_name(
+                args.name_prefix, "video-config", timestamp
+            ),
+            video_endpoint_name=resource_name(
+                args.name_prefix, "video-endpoint", timestamp
+            ),
+        )
+        save_state(state, args.state_file)
+
     ensure_bucket(s3, bucket, args.region)
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-    state = DeploymentState(
-        region=args.region,
-        bucket=bucket,
-        prefix=args.prefix.strip("/"),
-        image_model_name=resource_name(args.name_prefix, "image-model", timestamp),
-        image_endpoint_config_name=resource_name(
-            args.name_prefix, "image-config", timestamp
-        ),
-        image_endpoint_name=resource_name(
-            args.name_prefix, "image-endpoint", timestamp
-        ),
-        video_model_name=resource_name(args.name_prefix, "video-model", timestamp),
-        video_endpoint_config_name=resource_name(
-            args.name_prefix, "video-config", timestamp
-        ),
-        video_endpoint_name=resource_name(
-            args.name_prefix, "video-endpoint", timestamp
-        ),
-    )
-    save_state(state, args.state_file)
-
     image_uri = container_image_uri(args.region)
-    print(f"Creating image endpoint {state.image_endpoint_name}")
+    print(f"Preparing image endpoint {state.image_endpoint_name}")
     create_endpoint(
         sagemaker,
         model_name=state.image_model_name,
@@ -99,7 +124,7 @@ def main() -> None:
     )
     wait_for_endpoint(sagemaker, state.image_endpoint_name)
 
-    print(f"Creating video endpoint {state.video_endpoint_name}")
+    print(f"Preparing video endpoint {state.video_endpoint_name}")
     create_endpoint(
         sagemaker,
         model_name=state.video_model_name,

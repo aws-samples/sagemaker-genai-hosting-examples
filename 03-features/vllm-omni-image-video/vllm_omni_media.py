@@ -230,6 +230,23 @@ def wait_for_endpoint(
     raise TimeoutError(f"Timed out waiting for endpoint {endpoint_name}")
 
 
+def sagemaker_resource_exists(
+    sagemaker_client,
+    describe_method: str,
+    **kwargs,
+) -> bool:
+    """Return whether a named SageMaker resource exists."""
+
+    try:
+        getattr(sagemaker_client, describe_method)(**kwargs)
+        return True
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code")
+        if code == "ValidationException":
+            return False
+        raise
+
+
 def create_endpoint(
     sagemaker_client,
     *,
@@ -243,20 +260,27 @@ def create_endpoint(
     startup_timeout_seconds: int,
     async_output_path: str | None = None,
 ) -> None:
-    """Create a model, endpoint configuration, and SageMaker endpoint."""
+    """Create missing resources for a SageMaker endpoint."""
 
     environment = {"SM_VLLM_MODEL": model_id}
     if model_id == VIDEO_MODEL_ID:
         environment["SM_VLLM_VAE_USE_TILING"] = "true"
 
-    sagemaker_client.create_model(
+    if sagemaker_resource_exists(
+        sagemaker_client,
+        "describe_model",
         ModelName=model_name,
-        ExecutionRoleArn=role_arn,
-        PrimaryContainer={
-            "Image": image_uri,
-            "Environment": environment,
-        },
-    )
+    ):
+        print(f"Reusing model {model_name}")
+    else:
+        sagemaker_client.create_model(
+            ModelName=model_name,
+            ExecutionRoleArn=role_arn,
+            PrimaryContainer={
+                "Image": image_uri,
+                "Environment": environment,
+            },
+        )
 
     endpoint_config: dict[str, object] = {
         "EndpointConfigName": endpoint_config_name,
@@ -280,11 +304,26 @@ def create_endpoint(
             "ClientConfig": {"MaxConcurrentInvocationsPerInstance": 1},
         }
 
-    sagemaker_client.create_endpoint_config(**endpoint_config)
-    sagemaker_client.create_endpoint(
-        EndpointName=endpoint_name,
+    if sagemaker_resource_exists(
+        sagemaker_client,
+        "describe_endpoint_config",
         EndpointConfigName=endpoint_config_name,
-    )
+    ):
+        print(f"Reusing endpoint configuration {endpoint_config_name}")
+    else:
+        sagemaker_client.create_endpoint_config(**endpoint_config)
+
+    if sagemaker_resource_exists(
+        sagemaker_client,
+        "describe_endpoint",
+        EndpointName=endpoint_name,
+    ):
+        print(f"Reusing endpoint {endpoint_name}")
+    else:
+        sagemaker_client.create_endpoint(
+            EndpointName=endpoint_name,
+            EndpointConfigName=endpoint_config_name,
+        )
 
 
 def invoke_image(
