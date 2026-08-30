@@ -1,9 +1,11 @@
 import base64
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
+from PIL import Image
 
 from vllm_omni_media import (
     DeploymentState,
@@ -15,11 +17,17 @@ from vllm_omni_media import (
     image_data_url,
     load_state,
     parse_s3_uri,
+    prepare_video_reference,
     save_state,
     submit_video,
     validate_mp4,
     wait_for_s3_object,
 )
+
+def make_png(size: tuple[int, int] = (1, 1)) -> bytes:
+    output = BytesIO()
+    Image.new("RGB", size, "navy").save(output, format="PNG")
+    return output.getvalue()
 
 
 def test_container_image_uri_uses_pinned_dlc_release():
@@ -65,7 +73,6 @@ def test_build_video_multipart_contains_reference_and_controls():
         height=320,
         num_frames=17,
         fps=8,
-        steps=4,
         seed=9,
         boundary="test-boundary",
     )
@@ -79,7 +86,7 @@ def test_build_video_multipart_contains_reference_and_controls():
     assert 'name="height"\r\n\r\n320' in text
     assert 'name="num_frames"\r\n\r\n17' in text
     assert 'name="fps"\r\n\r\n8' in text
-    assert 'name="num_inference_steps"\r\n\r\n4' in text
+    assert 'name="num_inference_steps"\r\n\r\n30' in text
     assert 'name="seed"\r\n\r\n9' in text
     assert body.endswith(b"--test-boundary--\r\n")
 
@@ -132,6 +139,7 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
         instance_type="ml.g6e.xlarge",
         startup_timeout_seconds=3600,
         async_output_path="s3://example-bucket/outputs/",
+        async_failure_path="s3://example-bucket/failures/",
     )
 
     assert client.calls["model"]["PrimaryContainer"]["Environment"] == {
@@ -144,7 +152,10 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
         "al2023-ami-sagemaker-inference-gpu-4-1"
     )
     assert client.calls["config"]["AsyncInferenceConfig"] == {
-        "OutputConfig": {"S3OutputPath": "s3://example-bucket/outputs/"},
+        "OutputConfig": {
+            "S3OutputPath": "s3://example-bucket/outputs/",
+            "S3FailurePath": "s3://example-bucket/failures/",
+        },
         "ClientConfig": {"MaxConcurrentInvocationsPerInstance": 1},
     }
     assert client.calls["endpoint"] == {
@@ -196,6 +207,20 @@ def test_create_endpoint_reuses_existing_resources():
     assert client.create_calls == []
 
 
+def test_prepare_video_reference_resizes_to_compact_jpeg():
+    reference = prepare_video_reference(
+        make_png((1024, 1024)),
+        width=480,
+        height=320,
+    )
+
+    assert reference.startswith(b"\xff\xd8")
+    assert len(reference) < 1_000_000
+    with Image.open(BytesIO(reference)) as image:
+        assert image.size == (480, 320)
+        assert image.format == "JPEG"
+
+
 def test_submit_video_uploads_multipart_request_before_async_invocation():
     class FakeS3:
         def __init__(self):
@@ -234,7 +259,7 @@ def test_submit_video_uploads_multipart_request_before_async_invocation():
         s3,
         state,
         "Move the clouds slowly",
-        b"png",
+        make_png(),
     )
 
     assert output_uri == "s3://example-bucket/outputs/result.out"

@@ -25,10 +25,11 @@ flowchart LR
 ```
 
 The image endpoint returns an OpenAI-compatible JSON response containing a
-base64-encoded PNG. The sample places that PNG in the video request as a base64
-data URL. It uploads the complete multipart request to Amazon S3, invokes
-`/v1/videos/sync` through the asynchronous endpoint, and downloads the MP4 from
-the returned output location.
+base64-encoded PNG. The sample resizes that image to the video dimensions and
+encodes it as a compact JPEG data URL so the multipart field remains below the
+server's per-part size. It uploads the complete multipart request to Amazon S3,
+invokes `/v1/videos/sync` through the asynchronous endpoint, and downloads the
+MP4 from the returned output location.
 
 ## Prerequisites
 
@@ -96,16 +97,16 @@ Run the complete workflow:
 ```bash
 python generate.py \
   --image-prompt "Cinematic photograph of a coastal observatory at sunrise" \
-  --video-prompt "Slow camera push-in as clouds move and grass bends in the wind"
+  --video-prompt "Slow camera push-in toward the coastal observatory; preserve the building and coastline"
 ```
 
 The script writes the PNG and MP4 to `outputs/`. It also prints the Amazon S3
 output location returned by SageMaker Asynchronous Inference.
 
-The default video settings use 17 frames and four diffusion steps to keep a
-validation run short. Increase `--frames` and `--video-steps` after you confirm
-the deployment, then assess output quality and instance memory for your
-workload.
+The default video settings use 17 frames and 30 diffusion steps. This matches
+the step count in the vLLM-Omni Wan VACE recipe while keeping the clip short.
+Use `--video-steps 4` only for a quick endpoint smoke test, then assess output
+quality, latency, and instance memory with your production settings.
 
 ## Run the Streamlit application
 
@@ -132,7 +133,8 @@ OpenAI-compatible route:
 The Videos API accepts multipart form data. This sample pre-builds the
 multipart body before uploading it to Amazon S3, which keeps the request format
 explicit and works across vLLM-Omni DLC releases that accept multipart
-requests.
+requests. The asynchronous endpoint writes successful responses to `outputs/`
+and invocation errors to `failures/` under the sample Amazon S3 prefix.
 
 ## Clean up
 

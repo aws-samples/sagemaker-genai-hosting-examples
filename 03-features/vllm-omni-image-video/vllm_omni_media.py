@@ -7,10 +7,12 @@ import json
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 from botocore.exceptions import ClientError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from urllib3.filepost import encode_multipart_formdata
 
 DLC_ACCOUNT_ID = "763104351884"
@@ -82,11 +84,45 @@ def decode_image_response(body: bytes) -> bytes:
         raise ValueError("Image response contained invalid base64 data") from error
 
 
-def image_data_url(image_bytes: bytes) -> str:
-    """Encode PNG bytes as a data URL accepted by vLLM-Omni."""
+def image_data_url(
+    image_bytes: bytes,
+    media_type: str = "image/png",
+) -> str:
+    """Encode image bytes as a data URL accepted by vLLM-Omni."""
 
     encoded = base64.b64encode(image_bytes).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return f"data:{media_type};base64,{encoded}"
+
+
+def prepare_video_reference(
+    image_bytes: bytes,
+    *,
+    width: int,
+    height: int,
+) -> bytes:
+    """Resize the source image to a compact JPEG for the multipart request."""
+
+    if width <= 0 or height <= 0:
+        raise ValueError("Video width and height must be positive")
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as source:
+            reference = ImageOps.fit(
+                source.convert("RGB"),
+                (width, height),
+                method=Image.Resampling.LANCZOS,
+            )
+    except (OSError, UnidentifiedImageError) as error:
+        raise ValueError("Source image could not be decoded") from error
+
+    output = BytesIO()
+    reference.save(
+        output,
+        format="JPEG",
+        quality=90,
+        optimize=True,
+    )
+    return output.getvalue()
 
 
 def build_video_multipart(
@@ -97,15 +133,16 @@ def build_video_multipart(
     height: int = 320,
     num_frames: int = 17,
     fps: int = 8,
-    steps: int = 4,
+    steps: int = 30,
     guidance_scale: float = 5.0,
     seed: int = 42,
+    image_media_type: str = "image/png",
     boundary: str | None = None,
 ) -> tuple[bytes, str]:
     """Build the multipart body required by the vLLM-Omni Videos API."""
 
     reference = json.dumps(
-        {"image_url": image_data_url(image_bytes)},
+        {"image_url": image_data_url(image_bytes, image_media_type)},
         separators=(",", ":"),
     )
     fields = {
@@ -259,6 +296,7 @@ def create_endpoint(
     instance_type: str,
     startup_timeout_seconds: int,
     async_output_path: str | None = None,
+    async_failure_path: str | None = None,
 ) -> None:
     """Create missing resources for a SageMaker endpoint."""
 
@@ -299,8 +337,11 @@ def create_endpoint(
         ],
     }
     if async_output_path:
+        output_config = {"S3OutputPath": async_output_path}
+        if async_failure_path:
+            output_config["S3FailurePath"] = async_failure_path
         endpoint_config["AsyncInferenceConfig"] = {
-            "OutputConfig": {"S3OutputPath": async_output_path},
+            "OutputConfig": output_config,
             "ClientConfig": {"MaxConcurrentInvocationsPerInstance": 1},
         }
 
@@ -365,15 +406,20 @@ def submit_video(
     height: int = 320,
     num_frames: int = 17,
     fps: int = 8,
-    steps: int = 4,
+    steps: int = 30,
     guidance_scale: float = 5.0,
     seed: int = 42,
 ) -> tuple[str, str | None, str]:
     """Upload a multipart request and submit it to the async video endpoint."""
 
+    reference_image = prepare_video_reference(
+        image_bytes,
+        width=width,
+        height=height,
+    )
     body, content_type = build_video_multipart(
         prompt,
-        image_bytes,
+        reference_image,
         width=width,
         height=height,
         num_frames=num_frames,
@@ -381,6 +427,7 @@ def submit_video(
         steps=steps,
         guidance_scale=guidance_scale,
         seed=seed,
+        image_media_type="image/jpeg",
     )
     request_key = f"{state.prefix}/requests/{uuid.uuid4().hex}.multipart"
     s3_client.put_object(
@@ -407,7 +454,7 @@ def wait_for_s3_object(
     *,
     failure_uri: str | None = None,
     timeout_seconds: int = 3600,
-    poll_seconds: int = 15,
+    poll_seconds: int = 5,
 ) -> bytes:
     """Poll an async inference output location and return its bytes."""
 

@@ -32,8 +32,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--video-prompt",
         default=(
-            "Slow camera push-in as clouds move across the sky and grass bends "
-            "in the wind, stable composition"
+            "Slow camera push-in toward the coastal observatory as clouds drift "
+            "across the sky and ocean waves move below; preserve the building, "
+            "coastline, and composition"
         ),
     )
     parser.add_argument("--image-size", default="1024x1024")
@@ -42,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=320)
     parser.add_argument("--frames", type=int, default=17)
     parser.add_argument("--fps", type=int, default=8)
-    parser.add_argument("--video-steps", type=int, default=4)
+    parser.add_argument("--video-steps", type=int, default=30)
     parser.add_argument("--guidance-scale", type=float, default=5.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--timeout", type=int, default=3600)

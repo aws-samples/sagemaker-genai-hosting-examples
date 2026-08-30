@@ -47,7 +47,7 @@ with image_col:
 with seed_col:
     seed = st.number_input("Seed", min_value=0, value=42, step=1)
 
-if st.button("Generate image", type="primary", use_container_width=True):
+if st.button("Generate image", type="primary", width="stretch"):
     with st.spinner("Generating image"):
         started = time.perf_counter()
         st.session_state.image_bytes = invoke_image(
@@ -64,22 +64,23 @@ if "image_bytes" in st.session_state:
     st.image(
         st.session_state.image_bytes,
         caption=f"FLUX.2-klein output in {st.session_state.image_seconds:.1f}s",
-        use_container_width=True,
+        width="stretch",
     )
     st.download_button(
         "Download image",
         st.session_state.image_bytes,
         "flux2-klein.png",
         "image/png",
-        use_container_width=True,
+        width="stretch",
     )
 
 st.divider()
 video_prompt = st.text_area(
     "Motion prompt",
     (
-        "Slow camera push-in as clouds move across the sky and grass bends "
-        "in the wind, stable composition"
+        "Slow camera push-in toward the coastal observatory as clouds drift "
+        "across the sky and ocean waves move below; preserve the building, "
+        "coastline, and composition"
     ),
 )
 frames_col, fps_col, steps_col = st.columns(3)
@@ -88,12 +89,12 @@ with frames_col:
 with fps_col:
     fps = st.select_slider("Frames per second", options=[4, 8, 16], value=8)
 with steps_col:
-    steps = st.select_slider("Inference steps", options=[4, 8, 16, 30], value=4)
+    steps = st.select_slider("Inference steps", options=[4, 8, 16, 30], value=30)
 
 if st.button(
     "Generate video",
     disabled="image_bytes" not in st.session_state,
-    use_container_width=True,
+    width="stretch",
 ):
     with st.status("Generating video", expanded=True) as status:
         status.write("Uploading the multipart request to Amazon S3")
@@ -134,5 +135,5 @@ if "video_bytes" in st.session_state:
         st.session_state.video_bytes,
         "wan-vace.mp4",
         "video/mp4",
-        use_container_width=True,
+        width="stretch",
     )

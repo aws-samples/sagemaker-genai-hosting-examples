@@ -1,3 +1,4 @@
 boto3>=1.40,<2
+pillow>=11,<13
 streamlit>=1.49,<2
 urllib3>=2,<3

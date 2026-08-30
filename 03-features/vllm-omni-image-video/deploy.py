@@ -136,6 +136,7 @@ def main() -> None:
         instance_type=args.video_instance_type,
         startup_timeout_seconds=3600,
         async_output_path=f"s3://{bucket}/{state.prefix}/outputs/",
+        async_failure_path=f"s3://{bucket}/{state.prefix}/failures/",
     )
     wait_for_endpoint(sagemaker, state.video_endpoint_name)
 
