@@ -1,2 +1,2 @@
-sagemaker==2.256.0
+sagemaker==2.257.6
 datasets==3.0.0
