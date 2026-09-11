@@ -1,0 +1,95 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: InferenceEndpointConfig
+metadata:
+  name: nemotron-3-5-lightning
+  namespace: default
+spec:
+  modelName: nemotron-3-5-lightning
+  #endpointName: ep-hp
+  instanceType: ml.g6e.2xlarge
+  replicas: 1
+  invocationEndpoint: v1/chat/completions
+  modelSourceConfig:
+    modelSourceType: huggingface
+    prefetchEnabled: true
+    huggingFaceModel:
+      modelId: "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
+  # kvCacheSpec block removed entirely (not just set to false) to prevent
+  # the operator from injecting vLLM's LMCacheConnectorV1 kv-transfer-config.
+  # That connector forces vLLM to disable its hybrid KV-cache manager, and
+  # Nemotron 3.5 Lightning's Mamba+Attention hybrid layers cannot be unified
+  # into one KV cache type, causing:
+  #   ValueError: Failed to promote local KV cache specs to one unified type.
+  intelligentRoutingSpec:
+    enabled: false
+    routingStrategy: prefixaware
+  loadBalancer:
+    healthCheckPath: /health
+  worker:
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+      requests:
+        nvidia.com/gpu: 1
+    image: vllm/vllm-openai:v0.27.1
+    args:
+      - "--model"
+      - "/opt/ml/model"
+      - "--served-model-name"
+      - "nemotron-3.5-lightning"
+      - "--tensor-parallel-size"
+      - "1"
+      - "--mamba-backend"
+      - "flashinfer"
+      - "--mamba-cache-mode"
+      - "align"
+      - "--enable-prefix-caching"
+      - "--max-num-batched-tokens"
+      - "16384"
+      - "--reasoning-parser"
+      - "nemotron_v3"
+      - "--enable-auto-tool-choice"
+      - "--tool-call-parser"
+      - "qwen3_xml"
+      - "--mamba-ssm-cache-dtype"
+      - "float16"
+      - "--enable-mamba-cache-stochastic-rounding"
+      - "--mamba-cache-philox-rounds"
+      - "5"
+      - "--speculative-config"
+      - '{"method":"dspark","model":"nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark","num_speculative_tokens":3}'
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+    modelInvocationPort:
+      containerPort: 8000
+      name: http
+    modelVolumeMount:
+      name: model-weights
+      mountPath: /opt/ml/model
+    environmentVariables:
+      - name: PYTHONHASHSEED
+        value: "0"
+      - name: HF_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: hf-token-secret
+            key: token
+    probes:
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 120
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 20
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 180
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 10

@@ -28,6 +28,11 @@ Deploys a recommendation produced by the AI Recommendation Service. Fetches the 
 
 ---
 
+### [`inference_optimization_concurrency_sweep.ipynb`](inference_optimization_concurrency_sweep.ipynb)
+Runs multiple tests at various levels of concurrency to determine when a SageMaker endpoint starts breaching SLAs.
+
+---
+
 ## Prerequisites
 
 - Model weights in S3 in HuggingFace SafeTensor format
