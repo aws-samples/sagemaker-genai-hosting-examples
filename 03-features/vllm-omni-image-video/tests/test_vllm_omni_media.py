@@ -138,8 +138,8 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
         model_id="Wan-AI/Wan2.1-VACE-1.3B-diffusers",
         instance_type="ml.g6e.xlarge",
         startup_timeout_seconds=3600,
-        async_output_path="s3://example-bucket/outputs/",
-        async_failure_path="s3://example-bucket/failures/",
+        async_output_path="s3://amzn-s3-demo-vllm-omni/outputs/",
+        async_failure_path="s3://amzn-s3-demo-vllm-omni/failures/",
     )
 
     assert client.calls["model"]["PrimaryContainer"]["Environment"] == {
@@ -153,8 +153,8 @@ def test_create_video_endpoint_uses_async_inference_and_gpu_ami():
     )
     assert client.calls["config"]["AsyncInferenceConfig"] == {
         "OutputConfig": {
-            "S3OutputPath": "s3://example-bucket/outputs/",
-            "S3FailurePath": "s3://example-bucket/failures/",
+            "S3OutputPath": "s3://amzn-s3-demo-vllm-omni/outputs/",
+            "S3FailurePath": "s3://amzn-s3-demo-vllm-omni/failures/",
         },
         "ClientConfig": {"MaxConcurrentInvocationsPerInstance": 1},
     }
@@ -236,13 +236,13 @@ def test_submit_video_uploads_multipart_request_before_async_invocation():
         def invoke_endpoint_async(self, **kwargs):
             self.request = kwargs
             return {
-                "OutputLocation": "s3://example-bucket/outputs/result.out",
-                "FailureLocation": "s3://example-bucket/failures/result.err",
+                "OutputLocation": "s3://amzn-s3-demo-vllm-omni/outputs/result.out",
+                "FailureLocation": "s3://amzn-s3-demo-vllm-omni/failures/result.err",
             }
 
     state = DeploymentState(
         region="us-east-1",
-        bucket="example-bucket",
+        bucket="amzn-s3-demo-vllm-omni",
         prefix="vllm-omni-media",
         image_model_name="image-model",
         image_endpoint_config_name="image-config",
@@ -262,15 +262,15 @@ def test_submit_video_uploads_multipart_request_before_async_invocation():
         make_png(),
     )
 
-    assert output_uri == "s3://example-bucket/outputs/result.out"
-    assert failure_uri == "s3://example-bucket/failures/result.err"
+    assert output_uri == "s3://amzn-s3-demo-vllm-omni/outputs/result.out"
+    assert failure_uri == "s3://amzn-s3-demo-vllm-omni/failures/result.err"
     assert request_key.startswith("vllm-omni-media/requests/")
-    assert s3.request["Bucket"] == "example-bucket"
+    assert s3.request["Bucket"] == "amzn-s3-demo-vllm-omni"
     assert s3.request["Key"] == request_key
     assert s3.request["ContentType"].startswith("multipart/form-data; boundary=")
     assert runtime.request == {
         "EndpointName": "video-endpoint",
-        "InputLocation": f"s3://example-bucket/{request_key}",
+        "InputLocation": f"s3://amzn-s3-demo-vllm-omni/{request_key}",
         "ContentType": s3.request["ContentType"],
         "Accept": "video/mp4",
         "CustomAttributes": "route=/v1/videos/sync",
@@ -297,8 +297,8 @@ def test_wait_for_s3_object_surfaces_async_failure():
     with pytest.raises(RuntimeError, match="model failed"):
         wait_for_s3_object(
             FakeS3(),
-            "s3://example-bucket/outputs/result.out",
-            failure_uri="s3://example-bucket/failures/result.err",
+            "s3://amzn-s3-demo-vllm-omni/outputs/result.out",
+            failure_uri="s3://amzn-s3-demo-vllm-omni/failures/result.err",
             timeout_seconds=1,
             poll_seconds=0,
         )
@@ -307,7 +307,7 @@ def test_wait_for_s3_object_surfaces_async_failure():
 def test_state_round_trip(tmp_path: Path):
     state = DeploymentState(
         region="us-east-1",
-        bucket="example-bucket",
+        bucket="amzn-s3-demo-vllm-omni",
         prefix="vllm-omni-media",
         image_model_name="image-model",
         image_endpoint_config_name="image-config",
@@ -324,8 +324,8 @@ def test_state_round_trip(tmp_path: Path):
 
 
 def test_parse_s3_uri():
-    assert parse_s3_uri("s3://example-bucket/path/to/output.mp4") == (
-        "example-bucket",
+    assert parse_s3_uri("s3://amzn-s3-demo-vllm-omni/path/to/output.mp4") == (
+        "amzn-s3-demo-vllm-omni",
         "path/to/output.mp4",
     )
 
