@@ -17,6 +17,7 @@ If you are contributing, please add a link to your model below:
 - [CodeGen](./Codegen25/)
 - [CodeLlama](./CodeLlama/)
 - [Swiss AI Initiative Apertus](./01-models/Swiss-AI/Apertus/)
+- [Kimi-K2.7-Code](./01-models/Kimi/Kimi-K2.7-Code/)
 
 ## Additional Resources
 

@@ -11,6 +11,9 @@ model-provider -> model name -> code examples
 
 ## List of models
 
+### 2026
+- [Kimi-K2.7-Code](./Kimi/Kimi-K2.7-Code/)
+
 ### 2025
 - [GLM-4.5](./Z.ai/GLM-4.5/)
 - [gpt-oss](./openai/gpt-oss/)

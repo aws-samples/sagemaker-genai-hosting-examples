@@ -1,0 +1,4 @@
+boto3>=1.40.0,<2
+aws_sdk_sagemaker_runtime_http2==0.4.0
+gradio==6.9.0
+numpy>=2.0,<3
