@@ -1,0 +1,39 @@
+# AWS Deep Learning Container CUDA image for llama.cpp.
+ARG DLC_IMAGE=public.ecr.aws/deep-learning-containers/llama-cpp@sha256:9f2eb2d9cbdc3172c2046117c4a43401bc95dbabdc3e2aeaa35daa11565c8b36
+FROM ${DLC_IMAGE}
+
+ARG LLAMA_CPP_PYTHON_COMMIT=ea3b56bdc386d5a6f31120338ffe907211b0907c
+ARG SEMIF_COMMIT=23cf1f39fc9534fe81437200959b6dfc7106e45a
+
+# This binding has the v0.4.1 model-parameter ABI used by the CUDA DLC. The
+# DLC predates one unused LoRA file-pointer symbol, so remove that wrapper.
+ENV LLAMA_CPP_LIB_PATH=/opt/llama.cpp/bin \
+    SEMIF_LLAMA_CPP_LIB_DIR=/opt/llama.cpp/bin \
+    SEMIF_PORT=8080 \
+    SEMIF_MAX_TOKENS=4096
+
+# SemIf uses the low-level API, so exclude the unused disk-cache import.
+RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \
+      cmake gcc gcc-c++ git make \
+    && python3 -m pip install --no-cache-dir \
+         "typing-extensions>=4.5.0" \
+         "jinja2>=2.11.3" \
+         "transformers==5.17.0" \
+         "numpy==2.2.6" \
+         "sentencepiece==0.2.1" \
+         "protobuf==7.36.1" \
+    && CMAKE_ARGS="-DLLAMA_BUILD=OFF -DLLAVA_BUILD=OFF" \
+       python3 -m pip install --no-cache-dir --no-deps \
+         "git+https://github.com/abetlen/llama-cpp-python.git@${LLAMA_CPP_PYTHON_COMMIT}" \
+    && python3 -c 'import site; from pathlib import Path; p = next(candidate for root in site.getsitepackages() if (candidate := Path(root) / "llama_cpp" / "__init__.py").is_file()); p.write_text(p.read_text().replace("from .llama import *\n", ""), encoding="utf-8")' \
+    && python3 -c 'import site; from pathlib import Path; p = next(candidate for root in site.getsitepackages() if (candidate := Path(root) / "llama_cpp" / "llama_cpp.py").is_file()); s = p.read_text(); start = s.index("# // Load a LoRA adapter from an open FILE pointer"); end = s.index("# // Get metadata value as a string by key name", start); p.write_text(s[:start] + s[end:])' \
+    && python3 -m pip install --no-cache-dir --no-deps \
+         "git+https://github.com/TheoLeeCJ/SemIf-OpenJev.git@${SEMIF_COMMIT}" \
+    && dnf remove -y cmake gcc gcc-c++ git make \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf /root/.cache
+
+COPY server.py /opt/semif/server.py
+
+EXPOSE 8080
+ENTRYPOINT ["python3", "/opt/semif/server.py"]

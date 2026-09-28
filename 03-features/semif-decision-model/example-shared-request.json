@@ -1,0 +1,34 @@
+{
+  "decisions": [
+    {
+      "id": "route-request",
+      "state": "The customer cannot sign in and reports that password reset emails never arrive.",
+      "question": "Which queue should handle this request?",
+      "options": [
+        {
+          "id": "account-access",
+          "description": "Account access support."
+        },
+        {
+          "id": "billing",
+          "description": "Billing support."
+        }
+      ]
+    },
+    {
+      "id": "set-priority",
+      "state": "The customer cannot sign in and reports that password reset emails never arrive.",
+      "question": "Which priority should the application assign?",
+      "options": [
+        {
+          "id": "urgent",
+          "description": "The issue blocks the customer from using the service."
+        },
+        {
+          "id": "standard",
+          "description": "The customer can continue using the service."
+        }
+      ]
+    }
+  ]
+}

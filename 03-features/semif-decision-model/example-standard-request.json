@@ -1,0 +1,10 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "A customer cannot receive a password reset email. Reply with the best support queue."
+    }
+  ],
+  "max_tokens": 64,
+  "stream": false
+}

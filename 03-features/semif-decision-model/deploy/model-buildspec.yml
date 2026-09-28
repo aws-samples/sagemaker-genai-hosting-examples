@@ -1,0 +1,49 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - python3 -m pip install --no-cache-dir "huggingface-hub==0.35.3"
+  build:
+    commands:
+      - set -euo pipefail
+      - test -n "${MODEL_S3_URI:?MODEL_S3_URI is required}"
+      - mkdir -p /tmp/model/tokenizer
+      - >-
+        python3 -c "from huggingface_hub import hf_hub_download;
+        hf_hub_download(repo_id='bartowski/Qwen_Qwen3.5-4B-GGUF',
+        revision='4168f45a16a1290d65a4ec0fa312ae917a4c15d6',
+        filename='Qwen_Qwen3.5-4B-Q4_K_M.gguf',
+        local_dir='/tmp/model')"
+      - >-
+        python3 -c "from huggingface_hub import snapshot_download;
+        snapshot_download(repo_id='Qwen/Qwen3.5-4B',
+        revision='851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a',
+        allow_patterns=['*.json','*.jinja','*.model','*.txt'],
+        local_dir='/tmp/model/tokenizer')"
+      - GGUF_SHA256="$(sha256sum /tmp/model/Qwen_Qwen3.5-4B-Q4_K_M.gguf | cut -d' ' -f1)"
+      - test "${GGUF_SHA256}" = "13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983"
+      - >-
+        printf '{"gguf":{"repo":"%s","revision":"%s","file":"%s","sha256":"%s"},
+        "tokenizer":{"repo":"%s","revision":"%s"}}\n'
+        "bartowski/Qwen_Qwen3.5-4B-GGUF"
+        "4168f45a16a1290d65a4ec0fa312ae917a4c15d6"
+        "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
+        "${GGUF_SHA256}"
+        "Qwen/Qwen3.5-4B"
+        "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+        > /tmp/model/model-manifest.json
+      - tar -C /tmp/model -czf /tmp/model.tar.gz .
+      - ARCHIVE_SHA256="$(sha256sum /tmp/model.tar.gz | cut -d' ' -f1)"
+      - aws s3 cp /tmp/model.tar.gz "${MODEL_S3_URI}"
+      - >-
+        printf '{"model_s3_uri":"%s","archive_sha256":"%s","gguf_sha256":"%s"}\n'
+        "${MODEL_S3_URI}" "${ARCHIVE_SHA256}" "${GGUF_SHA256}"
+        | tee model-detail.json
+
+artifacts:
+  files:
+    - model-detail.json
