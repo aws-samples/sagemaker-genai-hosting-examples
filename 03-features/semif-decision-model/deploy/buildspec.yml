@@ -1,0 +1,25 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  pre_build:
+    commands:
+      - set -euo pipefail
+      - test -n "${ECR_REPOSITORY_URI:?ECR_REPOSITORY_URI is required}"
+      - test -n "${IMAGE_TAG:?IMAGE_TAG is required}"
+      - ECR_REGISTRY="${ECR_REPOSITORY_URI%%/*}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+  build:
+    commands:
+      - docker build --platform linux/amd64 --pull -t "${ECR_REPOSITORY_URI}:${IMAGE_TAG}" .
+  post_build:
+    commands:
+      - docker push "${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
+      - IMAGE_DIGEST="$(aws ecr describe-images --repository-name "${ECR_REPOSITORY_URI#*/}" --image-ids imageTag="${IMAGE_TAG}" --query 'imageDetails[0].imageDigest' --output text)"
+      - printf '{"image_uri":"%s@%s","image_tag":"%s"}\n' "${ECR_REPOSITORY_URI}" "${IMAGE_DIGEST}" "${IMAGE_TAG}" | tee image-detail.json
+
+artifacts:
+  files:
+    - image-detail.json

@@ -1,0 +1,21 @@
+{
+  "decision": {
+    "id": "support-route",
+    "state": "Customer asks to reset a forgotten password and says the reset email never arrived.",
+    "question": "Which queue should handle this request?",
+    "options": [
+      {
+        "id": "account_access",
+        "description": "Account access and authentication support."
+      },
+      {
+        "id": "billing",
+        "description": "Billing and payment support."
+      },
+      {
+        "id": "sales",
+        "description": "Sales and product evaluation."
+      }
+    ]
+  }
+}
