@@ -1,0 +1,73 @@
+# CodeBuild: stage the DeepSeek-V4.1-Flash weights from the HuggingFace Hub to S3.
+# Streams each file straight to S3 (curl | aws s3 cp -) so no local disk is needed for the
+# ~475 GiB checkpoint. Files are copied in parallel and each upload is size-checked against the
+# HF metadata; a failed or truncated upload is deleted so a re-run retries it. Idempotent: files
+# already present in S3 with the expected size are skipped.
+# Env vars: HF_REPO, BUCKET, PREFIX (S3 key prefix), and optionally HF_TOKEN and CONCURRENCY.
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - pip install --quiet "huggingface_hub>=0.25"
+  build:
+    commands:
+      - |
+        python3 - <<'PY'
+        import os, subprocess, sys
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from huggingface_hub import HfApi
+
+        repo   = os.environ["HF_REPO"]
+        bucket = os.environ["BUCKET"]
+        prefix = os.environ["PREFIX"].strip("/")
+        token  = os.environ.get("HF_TOKEN") or None
+        workers = int(os.environ.get("CONCURRENCY", "8"))
+
+        api   = HfApi(token=token)
+        files = [f for f in api.list_repo_tree(repo, recursive=True) if hasattr(f, "size")]
+        base  = f"https://huggingface.co/{repo}/resolve/main"
+        total = sum(f.size for f in files)
+        print(f"{len(files)} files, {total / 2**30:.1f} GiB, concurrency {workers}", flush=True)
+
+        def s3_size(key):
+            r = subprocess.run(
+                ["aws", "s3api", "head-object", "--bucket", bucket, "--key", key,
+                 "--query", "ContentLength", "--output", "text"],
+                capture_output=True, text=True,
+            )
+            return int(r.stdout) if r.returncode == 0 else None
+
+        def stage(f):
+            key = f"{prefix}/{f.path}"
+            if s3_size(key) == f.size:
+                return f"skip (present): {f.path}"
+            curl = ["curl", "-sfL", "--retry", "5", "--retry-delay", "10"]
+            if token:
+                curl += ["-H", f"Authorization: Bearer {token}"]
+            curl.append(f"{base}/{f.path}")
+            p1 = subprocess.Popen(curl, stdout=subprocess.PIPE)
+            p2 = subprocess.Popen(
+                ["aws", "s3", "cp", "-", f"s3://{bucket}/{key}", "--expected-size", str(f.size), "--only-show-errors"],
+                stdin=p1.stdout,
+            )
+            p1.stdout.close()
+            p2.wait()
+            p1.wait()
+            if p1.returncode != 0 or p2.returncode != 0 or s3_size(key) != f.size:
+                subprocess.run(["aws", "s3", "rm", f"s3://{bucket}/{key}", "--only-show-errors"])
+                raise RuntimeError(f"failed to stage {f.path} (curl={p1.returncode}, s3={p2.returncode})")
+            return f"staged: {f.path} ({f.size / 2**30:.2f} GiB)"
+
+        failed = 0
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for fut in as_completed([pool.submit(stage, f) for f in files]):
+                try:
+                    print(fut.result(), flush=True)
+                except Exception as e:
+                    failed += 1
+                    print("ERROR:", e, flush=True)
+        if failed:
+            sys.exit(f"{failed} file(s) failed; re-run the build to retry them")
+        print("done", flush=True)
+        PY
