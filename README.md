@@ -18,6 +18,7 @@ If you are contributing, please add a link to your model below:
 - [CodeLlama](./CodeLlama/)
 - [Swiss AI Initiative Apertus](./01-models/Swiss-AI/Apertus/)
 - [Kimi-K2.7-Code](./01-models/Kimi/Kimi-K2.7-Code/)
+- [Strands Decider 2B](./01-models/StrandsAgents/strands-decider-2B/)
 
 ## Additional Resources
 
