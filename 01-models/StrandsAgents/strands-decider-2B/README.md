@@ -115,6 +115,8 @@ enabled. Only confirmed missing resources are ignored; permission
 and network errors are surfaced. The shared bucket and existing IAM role are
 preserved. The cleanup cell also removes this example's CloudWatch endpoint log
 group when the caller has permission.
+Endpoint log delivery is asynchronous: late log events can recreate the group
+after deletion. If it reappears, rerun the cleanup cell after delivery settles.
 
 ## References
 
