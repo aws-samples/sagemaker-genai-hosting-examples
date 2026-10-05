@@ -12,6 +12,7 @@ model-provider -> model name -> code examples
 ## List of models
 
 ### 2026
+- [Strands Decider 2B](./StrandsAgents/strands-decider-2B/)
 - [Kimi-K2.7-Code](./Kimi/Kimi-K2.7-Code/)
 
 ### 2025
