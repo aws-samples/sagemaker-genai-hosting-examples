@@ -162,9 +162,21 @@ def test_deploy_calls_sagemaker_with_validated_arguments(monkeypatch):
     ]
     create_model = calls[0][1]
     assert create_model["ModelName"] == "semif-example"
+    assert create_model["EnableNetworkIsolation"] is True
     assert create_model["PrimaryContainer"]["ModelDataUrl"].startswith("s3://")
     assert "@sha256:" in create_model["PrimaryContainer"]["Image"]
-    assert "SEMIF_THREADS" not in create_model["PrimaryContainer"]["Environment"]
+    environment = create_model["PrimaryContainer"]["Environment"]
+    assert "SEMIF_THREADS" not in environment
+    assert environment["SEMIF_MAX_REQUEST_TOKENS"] == "8192"
+    assert environment["SEMIF_MAX_SHARED_DECISIONS"] == "8"
+    assert environment["SEMIF_MAX_BODY_BYTES"] == "262144"
+
+
+@pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.gpu"])
+def test_child_images_preserve_the_sagemaker_root_user_contract(dockerfile):
+    instructions = (SAMPLE_ROOT / dockerfile).read_text(encoding="utf-8").splitlines()
+
+    assert not any(line.strip().startswith("USER ") for line in instructions)
 
 
 def test_deploy_sets_explicit_thread_count(monkeypatch):

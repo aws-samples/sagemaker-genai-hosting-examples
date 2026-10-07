@@ -13,7 +13,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Protocol
 
-MAX_BODY_BYTES = 1024 * 1024
+MAX_BODY_BYTES = 256 * 1024
+MAX_SHARED_DECISIONS = 8
+MAX_REQUEST_TOKENS = 8192
+RESERVED_CHAT_TOKENS = ("<|im_start|>", "<|im_end|>")
 _GGML_LIBRARY: ctypes.CDLL | None = None
 LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +72,7 @@ def model_params_with_gpu_layers(
 
 class Scorer(Protocol):
     metadata: dict[str, Any]
+    reserved_tokens: tuple[str, ...]
 
     def score(self, decision: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -91,6 +95,7 @@ class SemifScorer:
         threads: int | None,
         n_gpu_layers: int,
         max_tokens: int,
+        max_request_tokens: int,
     ):
         library_dir = Path(
             os.environ.get("SEMIF_LLAMA_CPP_LIB_DIR", "/opt/llama.cpp/bin")
@@ -115,14 +120,18 @@ class SemifScorer:
             )
         finally:
             llamacpp_backend._cpu_model_params = original_model_params
+        self.reserved_tokens = reserved_tokens_from_tokenizer(self._tokenizer)
         self.metadata.update(
             {
                 "n_gpu_layers": n_gpu_layers,
                 "registered_backends": backend_names,
                 "gpu_offload_requested": n_gpu_layers != 0,
+                "max_request_tokens": max_request_tokens,
+                "reserved_prompt_token_count": len(self.reserved_tokens),
             }
         )
         self._max_tokens = max_tokens
+        self._max_request_tokens = max_request_tokens
         self._lock = threading.Lock()
 
     def score(self, decision: dict[str, Any]) -> dict[str, Any]:
@@ -132,20 +141,33 @@ class SemifScorer:
                 self._tokenizer,
                 decision,
                 self.metadata,
-                self._max_tokens,
+                min(self._max_tokens, self._max_request_tokens),
             )
 
     def score_shared(
         self, decisions: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if len(decisions) > self._max_request_tokens:
+            raise ValueError("decisions exceeds the request token budget")
+        max_tokens_per_decision = min(
+            self._max_tokens,
+            self._max_request_tokens // len(decisions),
+        )
         with self._lock:
-            return self._backend_module.score_shared(
+            results, timing = self._backend_module.score_shared(
                 self._model,
                 self._tokenizer,
                 decisions,
                 self.metadata,
-                self._max_tokens,
+                max_tokens_per_decision,
             )
+        timing.update(
+            {
+                "max_request_tokens": self._max_request_tokens,
+                "max_tokens_per_decision": max_tokens_per_decision,
+            }
+        )
+        return results, timing
 
     def close(self) -> None:
         self._model.close()
@@ -210,13 +232,49 @@ def load_scorer_from_environment() -> SemifScorer:
         threads=_positive_integer("SEMIF_THREADS"),
         n_gpu_layers=gpu_layers_from_environment(),
         max_tokens=_positive_integer("SEMIF_MAX_TOKENS", 4096) or 4096,
+        max_request_tokens=(
+            _positive_integer("SEMIF_MAX_REQUEST_TOKENS", MAX_REQUEST_TOKENS)
+            or MAX_REQUEST_TOKENS
+        ),
     )
+
+
+def reserved_tokens_from_tokenizer(tokenizer: Any) -> tuple[str, ...]:
+    """Return every registered prompt-control token for request validation."""
+    registered = getattr(tokenizer, "all_special_tokens", ())
+    tokens = {
+        token
+        for token in (*RESERVED_CHAT_TOKENS, *registered)
+        if isinstance(token, str) and token
+    }
+    return tuple(sorted(tokens, key=lambda token: (-len(token), token)))
+
+
+def reject_reserved_prompt_tokens(
+    value: Any,
+    reserved_tokens: tuple[str, ...],
+) -> None:
+    """Reject user values that could alter the tokenizer's prompt structure."""
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, str):
+            if any(token in current for token in reserved_tokens):
+                raise ValueError(
+                    "Decision fields cannot contain reserved prompt control tokens"
+                )
+        elif isinstance(current, dict):
+            for key, nested in current.items():
+                pending.extend((key, nested))
+        elif isinstance(current, list):
+            pending.extend(current)
 
 
 def parse_request(
     payload: Any,
     *,
-    max_shared_decisions: int = 64,
+    max_shared_decisions: int = MAX_SHARED_DECISIONS,
+    reserved_tokens: tuple[str, ...] = RESERVED_CHAT_TOKENS,
 ) -> tuple[str, dict[str, Any] | list[dict[str, Any]]]:
     if not isinstance(payload, dict):
         raise ValueError("Request body must be a JSON object")  # noqa: TRY004
@@ -234,6 +292,7 @@ def parse_request(
             raise ValueError(
                 "Request must contain one decision object"
             )
+        reject_reserved_prompt_tokens(decision, reserved_tokens)
         return "single", decision
 
     decisions = payload["decisions"]
@@ -247,6 +306,7 @@ def parse_request(
         )
     if any(not isinstance(decision, dict) for decision in decisions):
         raise ValueError("decisions must contain only decision objects")
+    reject_reserved_prompt_tokens(decisions, reserved_tokens)
     return "shared", decisions
 
 
@@ -254,12 +314,25 @@ def make_handler(
     scorer: Scorer,
     *,
     max_in_flight: int = 1,
-    max_shared_decisions: int = 64,
+    max_shared_decisions: int = MAX_SHARED_DECISIONS,
+    max_body_bytes: int = MAX_BODY_BYTES,
+    reserved_tokens: tuple[str, ...] | None = None,
 ):
     if max_in_flight < 1:
         raise ValueError("max_in_flight must be a positive integer")
     if max_shared_decisions < 1:
         raise ValueError("max_shared_decisions must be a positive integer")
+    if max_body_bytes < 1:
+        raise ValueError("max_body_bytes must be a positive integer")
+    if reserved_tokens is None:
+        scorer_tokens = getattr(scorer, "reserved_tokens", ())
+        reserved_tokens = (
+            scorer_tokens
+            if isinstance(scorer_tokens, tuple) and scorer_tokens
+            else RESERVED_CHAT_TOKENS
+        )
+    if not reserved_tokens:
+        raise ValueError("reserved_tokens must not be empty")
     admission = threading.BoundedSemaphore(max_in_flight)
 
     class Handler(BaseHTTPRequestHandler):
@@ -291,9 +364,9 @@ def make_handler(
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if length < 1 or length > MAX_BODY_BYTES:
+                if length < 1 or length > max_body_bytes:
                     raise ValueError(
-                        f"Content-Length must be between 1 and {MAX_BODY_BYTES} bytes"
+                        f"Content-Length must be between 1 and {max_body_bytes} bytes"
                     )
             except ValueError as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -312,6 +385,7 @@ def make_handler(
                 mode, work = parse_request(
                     payload,
                     max_shared_decisions=max_shared_decisions,
+                    reserved_tokens=reserved_tokens,
                 )
                 if mode == "single":
                     result = scorer.score(work)
@@ -344,7 +418,11 @@ def main() -> None:
     port = _positive_integer("SEMIF_PORT", 8080) or 8080
     max_in_flight = _positive_integer("SEMIF_MAX_IN_FLIGHT", 1) or 1
     max_shared_decisions = (
-        _positive_integer("SEMIF_MAX_SHARED_DECISIONS", 64) or 64
+        _positive_integer("SEMIF_MAX_SHARED_DECISIONS", MAX_SHARED_DECISIONS)
+        or MAX_SHARED_DECISIONS
+    )
+    max_body_bytes = (
+        _positive_integer("SEMIF_MAX_BODY_BYTES", MAX_BODY_BYTES) or MAX_BODY_BYTES
     )
     server = ThreadingHTTPServer(
         ("0.0.0.0", port),
@@ -352,6 +430,8 @@ def main() -> None:
             scorer,
             max_in_flight=max_in_flight,
             max_shared_decisions=max_shared_decisions,
+            max_body_bytes=max_body_bytes,
+            reserved_tokens=scorer.reserved_tokens,
         ),
     )
     try:
@@ -362,6 +442,7 @@ def main() -> None:
                     "port": port,
                     "max_in_flight": max_in_flight,
                     "max_shared_decisions": max_shared_decisions,
+                    "max_body_bytes": max_body_bytes,
                     "model": scorer.metadata,
                 },
                 allow_nan=False,
