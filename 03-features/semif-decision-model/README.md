@@ -374,7 +374,7 @@ enforcement.
 For shared-state scoring, replace `decision` with a nonempty `decisions` list.
 Use this mode when your application asks several questions about the same
 document, conversation, or agent state. Every `state` value must be exactly
-equal and every decision ID must be unique. The endpoint accepts at most 64
+equal and every decision ID must be unique. The endpoint accepts at most 8
 decisions by default.
 
 ```bash
@@ -406,6 +406,8 @@ shared operation:
     "prefix_tokens": 22,
     "prefill_seconds": 0.31,
     "suffix_forward_seconds": 0.08,
+    "max_request_tokens": 8192,
+    "max_tokens_per_decision": 4096,
     "total_seconds": 0.42
   }
 }
@@ -426,9 +428,33 @@ instances for more concurrent capacity.
 
 Set `SEMIF_MAX_IN_FLIGHT` only if you deliberately want a small bounded queue.
 Increasing it does not make the single model context execute in parallel.
-The endpoint accepts up to 64 decisions in one shared request by default. Set
-`SEMIF_MAX_SHARED_DECISIONS` to a lower positive integer when your application
-needs a tighter per-request compute bound.
+
+### Understand the request and runtime guardrails
+
+The SemIf adapter requires a declared `Content-Length` between 1 byte and
+256 KiB and accepts at most 8 decisions in one shared request by default.
+Configure these limits with the positive integer environment variables
+`SEMIF_MAX_BODY_BYTES` and `SEMIF_MAX_SHARED_DECISIONS`.
+
+`SEMIF_MAX_REQUEST_TOKENS` provides a request-wide prompt allowance of 8,192
+tokens by default. A single decision can use up to the lower of
+`SEMIF_MAX_TOKENS` and `SEMIF_MAX_REQUEST_TOKENS`. For a shared request with
+`N` decisions, every prompt must fit within the lower of `SEMIF_MAX_TOKENS`
+and `floor(SEMIF_MAX_REQUEST_TOKENS / N)`. The adapter returns HTTP `400`
+instead of truncating a prompt that exceeds this per-decision limit. This
+allocation caps the sum of the prompt allowances even though shared scoring
+computes the common state prefix once. Shared responses report
+`max_request_tokens` and `max_tokens_per_decision` in `timing`.
+
+After parsing the JSON and before constructing prompts, the adapter recursively
+rejects every case-sensitive special token registered by the pinned tokenizer,
+including `<|im_start|>`, `<|im_end|>`, and `<|endoftext|>`. It checks object
+keys and values anywhere inside `decision` or `decisions`, including IDs,
+state, questions, and options.
+
+Both deployment scripts enable SageMaker network isolation, so the inference
+containers cannot make outbound network calls at runtime. Package the model
+and tokenizer artifacts in `model.tar.gz`; do not depend on runtime downloads.
 
 ## Clean up
 

@@ -44,6 +44,7 @@ def deploy(
     sm.create_model(
         ModelName=name,
         ExecutionRoleArn=role_arn,
+        EnableNetworkIsolation=True,
         PrimaryContainer={
             "Image": image_uri,
             "ModelDataUrl": model_data_url,

@@ -68,6 +68,7 @@ def test_standard_deployment_creates_sagemaker_resources(monkeypatch):
         "create_endpoint",
     ]
     container = calls[0][1]["PrimaryContainer"]
+    assert calls[0][1]["EnableNetworkIsolation"] is True
     assert container["ModelDataUrl"] == "s3://sample-bucket/llamacpp/model.tar.gz"
     assert container["Environment"] == {"SM_LLAMA_CPP_CTX_SIZE": "4096"}
     assert not any(key.startswith("SEMIF_") for key in container["Environment"])

@@ -10,7 +10,10 @@ ARG SEMIF_COMMIT=23cf1f39fc9534fe81437200959b6dfc7106e45a
 ENV LLAMA_CPP_LIB_PATH=/opt/llama.cpp/bin \
     SEMIF_LLAMA_CPP_LIB_DIR=/opt/llama.cpp/bin \
     SEMIF_PORT=8080 \
-    SEMIF_MAX_TOKENS=4096
+    SEMIF_MAX_TOKENS=4096 \
+    SEMIF_MAX_REQUEST_TOKENS=8192 \
+    SEMIF_MAX_SHARED_DECISIONS=8 \
+    SEMIF_MAX_BODY_BYTES=262144
 
 # SemIf uses the low-level API, so exclude the unused disk-cache import.
 RUN dnf install -y --allowerasing --setopt=install_weak_deps=False \

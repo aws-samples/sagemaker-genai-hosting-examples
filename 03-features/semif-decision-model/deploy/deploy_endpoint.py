@@ -106,6 +106,9 @@ def deploy(
     environment = {
         "SEMIF_TOKENIZER_REVISION": TOKENIZER_REVISION,
         "SEMIF_MAX_TOKENS": "4096",
+        "SEMIF_MAX_REQUEST_TOKENS": "8192",
+        "SEMIF_MAX_SHARED_DECISIONS": "8",
+        "SEMIF_MAX_BODY_BYTES": str(256 * 1024),
         "SEMIF_N_GPU_LAYERS": str(gpu_layers),
     }
     if threads is not None:
@@ -116,6 +119,7 @@ def deploy(
     sm.create_model(
         ModelName=name,
         ExecutionRoleArn=role_arn,
+        EnableNetworkIsolation=True,
         PrimaryContainer={
             "Image": image_uri,
             "ModelDataUrl": model_data_url,
