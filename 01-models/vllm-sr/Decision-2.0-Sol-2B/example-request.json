@@ -1,0 +1,27 @@
+{
+  "state": "The user asked for the current weather but did not provide a city. The proposed tool call is get_weather(location=\"Seattle\"). No prior message supplies Seattle.",
+  "questions": {
+    "arguments_grounded": {
+      "type": "noul",
+      "instructions": "Are all arguments of the proposed tool call explicitly grounded in information supplied by the user?"
+    },
+    "next_action": {
+      "type": "choice",
+      "instructions": "Choose the appropriate next step.",
+      "criteria": {
+        "execute": "Execute the proposed weather tool call now.",
+        "clarify": "Ask the user which city they want the weather for.",
+        "other": "Neither of the listed actions is appropriate."
+      }
+    },
+    "readiness": {
+      "type": "score",
+      "instructions": "How ready is the proposed tool call for execution?",
+      "criteria": [
+        "Missing required information",
+        "Requires confirmation",
+        "All required information supplied"
+      ]
+    }
+  }
+}
