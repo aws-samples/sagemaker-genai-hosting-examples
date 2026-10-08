@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 """Stage everything the endpoint needs, so it can run with network isolation.
 
-The default notebook lets the container download its Python packages and the model
+The default notebook lets the container download the Decider runtime and the model
 weights at startup. A network-isolated container cannot reach PyPI, GitHub, or Hugging
 Face, so this module stages them ahead of time into one directory that SageMaker AI
 downloads from Amazon S3 before the container starts:
@@ -38,7 +38,7 @@ CHECKPOINT_FILES = [
     "tokenizer.json", "tokenizer_config.json", "chat_template.jinja",
     "provenance.json", "MANIFEST.sha256", "LICENSE.md",
 ]
-# The AWS PyTorch inference DLC used by this example runs CPython 3.12 on x86_64 Linux.
+# The serving image (PyTorch 2.14 DLC on Amazon Linux 2023) runs CPython 3.12 on x86_64 Linux.
 PLATFORM_ARGS = [
     "--only-binary=:all:", "--implementation", "cp", "--python-version", "3.12",
     "--abi", "cp312", "--platform", "manylinux_2_28_x86_64",

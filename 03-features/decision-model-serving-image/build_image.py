@@ -52,29 +52,29 @@ def build_image(*, region: str, bucket: str, codebuild_role_arn: str,
     ecr_uri = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository_name}"
     source_key = f"decision-model-serving/build-source-{image_tag}.zip"
     s3.put_object(Bucket=bucket, Key=source_key, Body=source_archive(), ContentType="application/zip")
-    project = {
-        "name": project_name,
-        "source": {"type": "S3", "location": f"{bucket}/{source_key}", "buildspec": "buildspec.yml"},
-        "artifacts": {"type": "NO_ARTIFACTS"},
-        "environment": {
-            "type": "LINUX_CONTAINER",
-            # The PyTorch DLC base is about 10 GB compressed; LARGE builds it in about 5 minutes.
-            "computeType": "BUILD_GENERAL1_LARGE",
-            "image": "aws/codebuild/amazonlinux-x86_64-standard:5.0",
-            "privilegedMode": True,
-            "environmentVariables": [
-                {"name": "ECR_REPOSITORY_URI", "value": ecr_uri},
-                {"name": "IMAGE_TAG", "value": image_tag},
-            ],
-        },
-        "serviceRole": codebuild_role_arn,
-    }
-    if codebuild.batch_get_projects(names=[project_name])["projects"]:
-        codebuild.update_project(**project)
-    else:
-        codebuild.create_project(**project)
-    build_id = codebuild.start_build(projectName=project_name)["build"]["id"]
     try:
+        project = {
+            "name": project_name,
+            "source": {"type": "S3", "location": f"{bucket}/{source_key}", "buildspec": "buildspec.yml"},
+            "artifacts": {"type": "NO_ARTIFACTS"},
+            "environment": {
+                "type": "LINUX_CONTAINER",
+                # The PyTorch DLC base is about 10 GB compressed; LARGE builds it in about 7 minutes.
+                "computeType": "BUILD_GENERAL1_LARGE",
+                "image": "aws/codebuild/amazonlinux-x86_64-standard:5.0",
+                "privilegedMode": True,
+                "environmentVariables": [
+                    {"name": "ECR_REPOSITORY_URI", "value": ecr_uri},
+                    {"name": "IMAGE_TAG", "value": image_tag},
+                ],
+            },
+            "serviceRole": codebuild_role_arn,
+        }
+        if codebuild.batch_get_projects(names=[project_name])["projects"]:
+            codebuild.update_project(**project)
+        else:
+            codebuild.create_project(**project)
+        build_id = codebuild.start_build(projectName=project_name)["build"]["id"]
         while True:
             build = codebuild.batch_get_builds(ids=[build_id])["builds"][0]
             if build["buildStatus"] != "IN_PROGRESS":

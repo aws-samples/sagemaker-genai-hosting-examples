@@ -21,6 +21,8 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
+from sagemaker_inference.errors import GenericInferenceToolkitError
+from starlette.concurrency import run_in_threadpool
 
 MODEL_DIR = "/opt/ml/model"
 CODE_DIR = Path(os.environ.get("SAGEMAKER_SUBMIT_DIRECTORY", f"{MODEL_DIR}/code"))
@@ -55,14 +57,11 @@ def ping() -> Response:
 
 @app.post("/invocations")
 async def invocations(request: Request) -> Response:
-    from sagemaker_inference.errors import GenericInferenceToolkitError
-
     body = await request.body()
     content_type = request.headers.get("content-type", "application/json")
     accept = request.headers.get("accept", "application/json")
     try:
         # transform_fn is synchronous; run it in the thread pool, as FastAPI does for sync routes.
-        from starlette.concurrency import run_in_threadpool
         payload, out_type = await run_in_threadpool(adapter.transform_fn, model, body, content_type, accept)
     except GenericInferenceToolkitError as error:
         return Response(content=error.message, status_code=error.status_code, media_type="text/plain")
