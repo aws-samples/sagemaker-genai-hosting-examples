@@ -28,9 +28,10 @@ PyTorch 2.14 in this image is built for CUDA 13, which ships with NVIDIA driver 
 `InferenceAmiVersion` set to `al2023-ami-sagemaker-inference-gpu-4-1` (driver 580, CUDA 13.0). It is compatible with `ml.g4dn`, `ml.g5`,
 `ml.g6` and `ml.g6e`, and the sample notebooks set it for you.
 
-The default AMIs for `ml.g5` and `ml.g4dn` have driver 470 (CUDA 11.4). On `ml.g4dn.xlarge` the default AMI
-failed with `CannotStartContainerError`; with the driver 580 AMI the same image started and answered. The
-default `ml.g6` AMI worked through the DLC's CUDA forward compatibility, but set the AMI explicitly anyway.
+The default AMIs for `ml.g5` and `ml.g4dn` have driver 470 (CUDA 11.4). On both `ml.g5.xlarge` and
+`ml.g4dn.xlarge` the default AMI failed with `CannotStartContainerError`; with the driver 580 AMI the same image
+started and answered (A10G and T4). The default `ml.g6` AMI worked through the DLC's CUDA forward compatibility,
+but set the AMI explicitly anyway.
 
 ## Files
 

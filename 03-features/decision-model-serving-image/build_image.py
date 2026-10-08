@@ -32,6 +32,28 @@ def source_archive() -> bytes:
     return buffer.getvalue()
 
 
+def ensure_bucket(s3, bucket: str, region: str) -> None:
+    """Create the artifact bucket, with public access blocked, if it does not exist yet."""
+    from botocore.exceptions import ClientError
+
+    try:
+        s3.head_bucket(Bucket=bucket)
+    except ClientError as error:
+        if error.response["Error"]["Code"] not in {"404", "NoSuchBucket", "NotFound"}:
+            raise
+        args = {"Bucket": bucket}
+        if region != "us-east-1":
+            args["CreateBucketConfiguration"] = {"LocationConstraint": region}
+        s3.create_bucket(**args)
+        s3.put_public_access_block(
+            Bucket=bucket,
+            PublicAccessBlockConfiguration={
+                "BlockPublicAcls": True, "IgnorePublicAcls": True,
+                "BlockPublicPolicy": True, "RestrictPublicBuckets": True,
+            },
+        )
+
+
 def build_image(*, region: str, bucket: str, codebuild_role_arn: str,
                 repository_name: str = "decision-model-serving",
                 project_name: str = "decision-model-serving-build",
@@ -51,6 +73,7 @@ def build_image(*, region: str, bucket: str, codebuild_role_arn: str,
                               encryptionConfiguration={"encryptionType": "AES256"})
     ecr_uri = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository_name}"
     source_key = f"decision-model-serving/build-source-{image_tag}.zip"
+    ensure_bucket(s3, bucket, region)
     s3.put_object(Bucket=bucket, Key=source_key, Body=source_archive(), ContentType="application/zip")
     try:
         project = {

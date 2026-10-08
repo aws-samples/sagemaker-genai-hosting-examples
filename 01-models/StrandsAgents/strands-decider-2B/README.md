@@ -32,7 +32,7 @@ handler.
   startup (the default notebook). The example uses public, ungated artifacts and does
   not require a Hugging Face token.
 
-The notebooks were validated in `eu-west-1`. `SAGEMAKER_INSTANCE_TYPES` sets the
+The notebooks were validated in `eu-west-1` (`ml.g6.xlarge`) and `us-east-1` (`ml.g5.xlarge`). `SAGEMAKER_INSTANCE_TYPES` sets the
 instance types in priority order (default `ml.g5.xlarge,ml.g6.xlarge`). With more
 than one, the endpoint uses a
 [capacity-aware instance pool](../../../03-features/capacity-aware-instance-pool/),
@@ -150,14 +150,14 @@ PyTorch is no longer installed at startup. The previous path used the PyTorch 2.
 inference DLC, which reached end of support on June 30, 2026.
 
 PyTorch 2.14 is built for CUDA 13, which ships with NVIDIA driver 580. The endpoint sets
-`InferenceAmiVersion` to `al2023-ami-sagemaker-inference-gpu-4-1`, which ships that driver. On `ml.g4dn.xlarge`
-the default AMI (driver 470) failed with `CannotStartContainerError`; with this AMI it
-started and answered. `ml.g6.xlarge` was also tested. The default `ml.g5` AMI shares the
-driver 470 default, so the AMI is set explicitly for every instance type.
+`InferenceAmiVersion` to `al2023-ami-sagemaker-inference-gpu-4-1`, which ships that driver. On `ml.g5.xlarge` and
+`ml.g4dn.xlarge` the default AMI (driver 470) failed with `CannotStartContainerError`; with this AMI the image
+started and answered on both (an A10G and a T4). `ml.g6.xlarge` also worked, so the AMI is set explicitly for
+every instance type.
 
-In `eu-west-1` on `ml.g6.xlarge`, the example request returns the same answers as on the
+On `ml.g6.xlarge` (L4) in `eu-west-1`, the example request returns the same answers as on the
 2.6 path within 0.004, and median warm server latency is about 150 ms (about 125 ms
-before). The image is about 10 GB compressed because the base DLC carries the PyTorch
+before). On `ml.g5.xlarge` (A10G) in `us-east-1` it is about 160 ms. The image is about 10 GB compressed because the base DLC carries the PyTorch
 training stack. This is an evaluation example: review the dependencies and the image
 before production use.
 
