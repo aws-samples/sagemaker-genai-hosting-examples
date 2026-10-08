@@ -1,9 +1,12 @@
 """SageMaker adapter for the official Strands Decider engine."""
 
+import hashlib
 import json
+import os
 import threading
 import time
 from importlib.metadata import distribution, version
+from pathlib import Path
 
 MODEL_ID = "StrandsAgents/strands-decider-2B-hobson-v19"
 MODEL_REVISION = "bb282d786bc251fd4e3068de3ada9ddbb38127cd"
@@ -15,9 +18,19 @@ SOURCE_URL = f"https://github.com/strands-labs/strands-decider/archive/{CODE_REV
 def runtime_source_url():
     metadata = distribution("strands-decider").read_text("direct_url.json")
     source = json.loads(metadata or "{}").get("url")
-    if source != SOURCE_URL:
-        raise RuntimeError("The installed Decider runtime does not match the pinned source URL.")
-    return source
+    if source == SOURCE_URL:
+        return source
+    # Network-isolated deployment: the runtime was installed from a wheel that
+    # package_offline.py built from SOURCE_URL. Check that wheel against its record.
+    provenance = os.environ.get("DECIDER_WHEEL_PROVENANCE")
+    if provenance:
+        record = json.loads(Path(provenance).read_text())
+        wheel = Path(provenance).parent / "wheels" / record["wheel"]
+        if (record["source_url"] == SOURCE_URL
+                and version("strands-decider") == record["version"]
+                and hashlib.sha256(wheel.read_bytes()).hexdigest() == record["sha256"]):
+            return SOURCE_URL
+    raise RuntimeError("The installed Decider runtime does not match the pinned source URL.")
 
 
 def model_fn(model_dir):
@@ -77,6 +90,7 @@ def transform_fn(model, request_body, content_type, accept):
             "source_url": model["source_url"],
             "base_revision": engine.model.config.base_revision,
             "device": engine.cfg.device, "gpu": torch.cuda.get_device_name(0),
+            "hf_hub_offline": os.environ.get("HF_HUB_OFFLINE") == "1",
             "max_length": engine.model.config.max_length,
             "strict_window": engine.cfg.strict_window, "max_batch": engine.cfg.max_batch,
             "versions": {

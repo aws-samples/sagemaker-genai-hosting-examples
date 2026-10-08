@@ -48,6 +48,41 @@ It uses `boto3` directly, without requiring SageMaker Python SDK v2.
 | `inference.py` | SageMaker `model_fn` / `transform_fn` adapter for the official Decider engine |
 | `requirements.txt` | Container dependencies and pinned upstream runtime source |
 | `example-request.json` | Tool-call readiness example containing all three question types |
+| `deploy_strands_decider_2b_sagemaker_network_isolated.ipynb` | The same deployment with `EnableNetworkIsolation=True`; see [Network-isolated deployment](#network-isolated-deployment) |
+| `package_offline.py` | Stages the wheels and pinned model files for the network-isolated notebook |
+
+## Network-isolated deployment
+
+The default notebook lets the container install packages and download weights at
+startup, so the endpoint needs outbound access to PyPI, the PyTorch wheel index,
+GitHub, and Hugging Face. Where endpoints cannot reach the public internet, or where
+only reviewed artifacts may run, use
+[deploy_strands_decider_2b_sagemaker_network_isolated.ipynb](deploy_strands_decider_2b_sagemaker_network_isolated.ipynb).
+
+It deploys the same image, adapter, pins, and revisions with these changes:
+
+| | Default | Network-isolated |
+|---|---|---|
+| Container network | Outbound internet at startup | `EnableNetworkIsolation=True` |
+| Python packages | Installed from PyPI and the PyTorch index at startup | Installed with `--no-index` from wheels staged in S3 |
+| Decider runtime | Pinned source archive from GitHub; `direct_url.json` checked | Wheel built from the same pinned archive; SHA-256 checked against `code/provenance.json` |
+| Checkpoint and base weights | Downloaded from Hugging Face at startup | Staged in S3 as a Hugging Face cache; read with `HF_HUB_OFFLINE=1` |
+| Model data | `model.tar.gz` (code only) | Uncompressed S3 prefix (code, about 3 GB of wheels, and 4.6 GB of weights) |
+
+The notebook environment, not the endpoint, needs internet access while staging. It
+downloads about 7.6 GB (about 3 GB of wheels and 4.6 GB of weights); allow about 8 GB
+of free disk. Staging pins the container's `huggingface_hub` to the notebook's own
+version, because the offline cache layout differs across the allowed versions.
+
+The execution role needs read access to the artifact prefix, as in the default
+notebook. The notebook's caller also needs `s3:ListBucketVersions` and
+`s3:DeleteObjectVersion` on the artifact bucket: cleanup deletes every object version
+under the example's prefix. Network isolation also blocks the container's own AWS API
+calls; this adapter makes none.
+
+Network isolation removes the container's runtime downloads. It does not by itself
+review the staged packages or weights: scan and approve the staged directory under
+your organization's process before upload if that is required.
 
 ## Serving configuration
 
