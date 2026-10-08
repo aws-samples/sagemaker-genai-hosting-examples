@@ -1,0 +1,15 @@
+version: 0.2
+# CodeBuild: build the g7e serving image (container-g7e/) and push it to your ECR repository.
+# Env vars injected by the CodeBuild project: AWS_REGION, REGISTRY (<account>.dkr.ecr.<region>.amazonaws.com), IMAGE (full URI:tag).
+# Needs privileged mode (Docker) and BUILD_GENERAL1_LARGE or bigger (DeepGEMM compiles from source).
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    commands:
+      - cd container-g7e
+      - docker build -t "$IMAGE" .
+  post_build:
+    commands:
+      - docker push "$IMAGE"

@@ -1,0 +1,101 @@
+# vLLM v0.31.0: on SM12x (RTX PRO 6000 / g7e), DeepSeek-V4.1 FlashInfer sparse-MLA + indexer backends use a 64-token
+# kernel block, with a fail-fast check for FlashInfer runtime page sizes (>= 0.7.1). Context: vllm-project/vllm#59203.
+# Validated on EC2 g7e.48xlarge (TP8) and g7e.24xlarge (TP4) with --block-size 64; not yet merged upstream.
+diff --git a/vllm/models/deepseek_v41/nvidia/flashinfer_sparse.py b/vllm/models/deepseek_v41/nvidia/flashinfer_sparse.py
+index 0e02b48..63467c5 100644
+--- a/vllm/models/deepseek_v41/nvidia/flashinfer_sparse.py
++++ b/vllm/models/deepseek_v41/nvidia/flashinfer_sparse.py
+@@ -25,6 +25,7 @@ from vllm.models.deepseek_v41.sparse_mla import (
+     DeepseekV4SparseMLAMetadataBuilder,
+     DeepseekV41SparseSWAMetadataBuilder,
+ )
++from vllm.platforms import current_platform
+ from vllm.platforms.interface import DeviceCapability
+ from vllm.utils.flashinfer import flashinfer_trtllm_batch_decode_sparse_mla_dsv4
+ from vllm.v1.attention.backend import (
+@@ -115,6 +116,14 @@ class DeepseekV4FlashInferMLASparseBackend(DeepseekV4SparseMLABackend):
+ 
+     @staticmethod
+     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
++        # SM12x must agree with DeepseekV41IndexerBackend (64): the MLA and
++        # indexer pages share one manager block, so a mismatch fails
++        # select_common_block_size ("No common block size", #59203). The
++        # 64-token block puts ratio-2 compressed pages at 32 tokens, which
++        # FlashInfer's SM120 sparse MLA decodes only with runtime page sizes
++        # (flashinfer-ai/flashinfer#5197, FlashInfer >= 0.7.1).
++        if current_platform.is_device_capability_family(120):
++            return [64]
+         return [128]
+ 
+     @staticmethod
+@@ -615,8 +624,18 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
+ 
+     def __init__(self, vllm_config: VllmConfig, *args, **kwargs) -> None:
+         super().__init__(vllm_config, *args, **kwargs)
+-        from vllm.utils.flashinfer import has_flashinfer_sparse_mla_sm120_config
++        from vllm.utils.flashinfer import (
++            has_flashinfer_sparse_mla_sm120_config,
++            has_flashinfer_sparse_mla_sm120_runtime_page_size,
++        )
+ 
++        if not has_flashinfer_sparse_mla_sm120_runtime_page_size():
++            raise RuntimeError(
++                "FLASHINFER_MLA_SPARSE_DSV41 on SM120 requires FlashInfer >= 0.7.1 "
++                "(flashinfer-ai/flashinfer#5197). The installed build decodes "
++                "only 64-token pages, but DeepSeek-V4.1 uses 32-token SWA pages "
++                "and 32-token ratio-2 compressed pages on SM120."
++            )
+         required_topk = _required_sm120_sparse_topk(vllm_config, self.window_size)
+         if not has_flashinfer_sparse_mla_sm120_config(self.padded_heads, required_topk):
+             raise RuntimeError(
+diff --git a/vllm/utils/flashinfer.py b/vllm/utils/flashinfer.py
+index abc4d75..821baee 100644
+--- a/vllm/utils/flashinfer.py
++++ b/vllm/utils/flashinfer.py
+@@ -417,6 +417,25 @@ def has_flashinfer_sparse_mla_sm120_config(num_q_heads: int, top_k: int) -> bool
+     return dispatch is not None and (int(num_q_heads), int(top_k)) in dispatch
+ 
+ 
++@functools.cache
++def has_flashinfer_sparse_mla_sm120_runtime_page_size() -> bool:
++    """Return whether FlashInfer's SM120 DSV4 decode accepts any page size.
++
++    FlashInfer <= 0.7.0.post1 instantiates SM120 DSV4 decode only for 64-token
++    pages; flashinfer-ai/flashinfer#5197 (>= 0.7.1) makes the page size a
++    runtime argument and advertises it via ``page_block_size_is_runtime``.
++    (Same probe as vllm-project/vllm#57292.)
++    """
++    if not has_flashinfer_sparse_mla_sm120():
++        return False
++    mod = _get_submodule("flashinfer.mla")
++    get_configs = getattr(mod, "supported_sparse_mla_sm120_configs", None)
++    if get_configs is None:
++        return False
++    config = get_configs().get("dsv4")
++    return bool(getattr(config, "page_block_size_is_runtime", False))
++
++
+ @functools.cache
+ def has_flashinfer_cutedsl() -> bool:
+     """Return ``True`` if FlashInfer cutedsl module is available."""
+diff --git a/vllm/v1/attention/backends/mla/indexer.py b/vllm/v1/attention/backends/mla/indexer.py
+index e7eb67b..366e962 100644
+--- a/vllm/v1/attention/backends/mla/indexer.py
++++ b/vllm/v1/attention/backends/mla/indexer.py
+@@ -275,7 +275,15 @@ class DeepseekV41IndexerBackend(DeepseekV4IndexerBackend):
+ 
+     @staticmethod
+     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
+-        return [64 if current_platform.is_device_capability_family(90) else 128]
++        # SM90: 64. SM12x: 64 as well -- DeepGEMM's SM120 FP8 paged-MQA logits
++        # accept only 32- or 64-state pages, so a 128-token kernel block would
++        # give ratio-1 indexer pages 128 states. With 64, ratio-1 pages hold 64
++        # states and ratio-2 pages 32 (needs vllm-project/DeepGEMM#14).
++        if current_platform.is_device_capability_family(
++            90
++        ) or current_platform.is_device_capability_family(120):
++            return [64]
++        return [128]
+ 
+ 
+ @dataclass(frozen=True)
