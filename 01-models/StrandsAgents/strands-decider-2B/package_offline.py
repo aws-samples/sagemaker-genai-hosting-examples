@@ -23,6 +23,7 @@ import zipfile
 from email.parser import Parser
 from pathlib import Path
 
+import huggingface_hub
 from huggingface_hub import snapshot_download
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
@@ -65,26 +66,33 @@ def pip(*args: str) -> None:
 
 
 def missing_for_target(wheels: Path, top_level: list[str]) -> set[str]:
-    """Requirements that apply in the container but have no wheel in `wheels`."""
-    metadata, extras = {}, {}
+    """Requirements that apply in the container but have no matching wheel in `wheels`.
+
+    Checks each requirement's version range as well as its name, so staging fails here
+    rather than at offline install time.
+    """
+    available = {}  # name -> [(version, Requires-Dist lines)]
     for whl in wheels.glob("*.whl"):
+        name, ver, _, _ = parse_wheel_filename(whl.name)
         with zipfile.ZipFile(whl) as archive:
-            name = next(n for n in archive.namelist() if n.endswith(".dist-info/METADATA"))
-            metadata[canonicalize_name(parse_wheel_filename(whl.name)[0])] = (
-                Parser().parsestr(archive.read(name).decode()).get_all("Requires-Dist") or [])
+            meta = next(n for n in archive.namelist() if n.endswith(".dist-info/METADATA"))
+            requires = Parser().parsestr(archive.read(meta).decode()).get_all("Requires-Dist") or []
+        available.setdefault(canonicalize_name(name), []).append((ver, requires))
     pending = [Requirement(line) for line in top_level]
-    seen, missing = set(), set()
+    seen, extras, missing = set(), {}, set()
     while pending:
         req = pending.pop()
         key = canonicalize_name(req.name)
-        if (key, frozenset(req.extras)) in seen:
+        if (key, str(req.specifier), frozenset(req.extras)) in seen:
             continue
-        seen.add((key, frozenset(req.extras)))
+        seen.add((key, str(req.specifier), frozenset(req.extras)))
         extras.setdefault(key, set()).update(req.extras)
-        if key not in metadata:
+        matches = [(v, r) for v, r in available.get(key, [])
+                   if req.specifier.contains(v, prereleases=True)]
+        if not matches:
             missing.add(f"{req.name}{req.specifier}")
             continue
-        for line in metadata[key]:
+        for line in max(matches)[1]:
             dep = Requirement(line)
             if not dep.marker or any(dep.marker.evaluate({**TARGET_ENV, "extra": e})
                                      for e in {"", *extras[key]}):
@@ -110,6 +118,10 @@ def stage(example_dir: Path, stage_dir: Path) -> dict:
     index_args = [a for line in lines if line.startswith("--extra-index-url") for a in line.split()]
     pins = [line for line in lines if line.strip() and not line.startswith("--")
             and not line.startswith("strands-decider")]
+    # The container reads the cache this notebook writes, so it must run the same
+    # huggingface_hub version: cache layouts differ between versions in the allowed range.
+    pins = [f"huggingface_hub=={huggingface_hub.__version__}" if p.startswith("huggingface_hub") else p
+            for p in pins]
     pip("download", "--quiet", "--dest", str(wheels), *PLATFORM_ARGS, *index_args,
         *pins, str(decider_wheel))
     top_level = [*pins, f"strands-decider=={decider_version}"]
@@ -131,20 +143,30 @@ def stage(example_dir: Path, stage_dir: Path) -> dict:
 
     # 4. Weights: the pinned checkpoint and base revision as a Hugging Face cache, so the
     #    adapter's revision-pinned lookups resolve locally with HF_HUB_OFFLINE=1. S3 has no
-    #    symlinks, so keep only each repo's snapshot (as plain files) and its cached file
-    #    listing (trees/), which offline snapshot_download reads.
+    #    symlinks, so keep only each repo's snapshot (as plain files, moved rather than
+    #    copied to keep peak disk near the final size) and, where this huggingface_hub
+    #    version writes one, its cached file listing (trees/).
     download = stage_dir.parent / f"{stage_dir.name}-hf-download"
-    snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=download, allow_patterns=CHECKPOINT_FILES)
-    snapshot_download(BASE_ID, revision=BASE_REVISION, cache_dir=download)
-    cache = stage_dir / "hf-cache"
-    for repo in download.glob("models--*"):
-        shutil.copytree(repo / "trees", cache / repo.name / "trees")
-        for f in (repo / "snapshots").rglob("*"):
-            if f.is_file():
-                out = cache / f.relative_to(download)
-                out.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(f.resolve(), out)
-    shutil.rmtree(download)
+    try:
+        snapshot_download(MODEL_ID, revision=MODEL_REVISION, cache_dir=download, allow_patterns=CHECKPOINT_FILES)
+        snapshot_download(BASE_ID, revision=BASE_REVISION, cache_dir=download)
+        cache = stage_dir / "hf-cache"
+        for repo in download.glob("models--*"):
+            if (repo / "trees").is_dir():
+                shutil.copytree(repo / "trees", cache / repo.name / "trees")
+            placed = {}
+            for f in sorted((repo / "snapshots").rglob("*")):
+                if f.is_file():
+                    out = cache / f.relative_to(download)
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    blob = f.resolve()
+                    if blob in placed:  # two snapshot entries share one blob
+                        shutil.copyfile(placed[blob], out)
+                    else:
+                        shutil.move(blob, out)
+                        placed[blob] = out
+    finally:
+        shutil.rmtree(download, ignore_errors=True)
 
     files = [p for p in stage_dir.rglob("*") if p.is_file()]
     return {"files": len(files), "bytes": sum(p.stat().st_size for p in files), **provenance}

@@ -69,10 +69,16 @@ It deploys the same image, adapter, pins, and revisions with these changes:
 | Checkpoint and base weights | Downloaded from Hugging Face at startup | Staged in S3 as a Hugging Face cache; read with `HF_HUB_OFFLINE=1` |
 | Model data | `model.tar.gz` (code only) | Uncompressed S3 prefix (code, about 3 GB of wheels, and 4.6 GB of weights) |
 
-The notebook environment, not the endpoint, needs internet access while staging: it
-downloads about 7.6 GB (about 3 GB of wheels and 4.6 GB of weights) and needs that much free disk. The execution role needs read
-access to the artifact prefix, as in the default notebook. Network isolation also
-blocks the container's own AWS API calls; this adapter makes none.
+The notebook environment, not the endpoint, needs internet access while staging. It
+downloads about 7.6 GB (about 3 GB of wheels and 4.6 GB of weights); allow about 8 GB
+of free disk. Staging pins the container's `huggingface_hub` to the notebook's own
+version, because the offline cache layout differs across the allowed versions.
+
+The execution role needs read access to the artifact prefix, as in the default
+notebook. The notebook's caller also needs `s3:ListBucketVersions` and
+`s3:DeleteObjectVersion` on the artifact bucket: cleanup deletes every object version
+under the example's prefix. Network isolation also blocks the container's own AWS API
+calls; this adapter makes none.
 
 Network isolation removes the container's runtime downloads. It does not by itself
 review the staged packages or weights: scan and approve the staged directory under
