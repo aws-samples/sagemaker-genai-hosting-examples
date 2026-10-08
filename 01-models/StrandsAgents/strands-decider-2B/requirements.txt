@@ -1,13 +1,1 @@
---extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.7.1+cu118
-torchvision==0.22.1+cu118
-torchaudio==2.7.1+cu118
-transformers==5.17.0
-peft==0.21.0
-accelerate>=0.34,<2
-huggingface_hub>=1.5,<2
-pydantic>=2.7,<3
-numpy>=1.24,<3
-safetensors>=0.4,<1
-pyyaml>=6,<7
 strands-decider @ https://github.com/strands-labs/strands-decider/archive/75c9fd32e664954cdc18481434018aa507eee8fb.tar.gz

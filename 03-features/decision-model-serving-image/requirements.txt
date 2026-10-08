@@ -1,0 +1,15 @@
+# Shared by the decision-model samples. PyTorch 2.14 and CUDA 13 come from the base image.
+# Also covers the Strands Decider runtime's dependencies, so the network-isolated
+# notebook only needs to stage the Decider wheel itself.
+transformers==5.17.0
+peft==0.21.0
+accelerate>=0.34,<2
+huggingface_hub==1.33.0
+safetensors>=0.8,<1
+pydantic>=2.7,<3
+sagemaker-inference>=1.10,<2
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+typer>=0.12
+rich>=13.7
+pyyaml>=6,<7

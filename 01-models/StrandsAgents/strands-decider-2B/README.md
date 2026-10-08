@@ -1,7 +1,10 @@
 # Deploy Strands Decider 2B on Amazon SageMaker AI
 
 Deploy [Strands Decider 2B](https://github.com/strands-labs/strands-decider) to a
-SageMaker AI real-time endpoint on one `ml.g5.xlarge`.
+SageMaker AI real-time endpoint on one `ml.g5.xlarge`, falling back to `ml.g6.xlarge`
+when g5 capacity is unavailable. It runs on the maintained AWS PyTorch 2.14 SageMaker
+DLC through the shared
+[decision-model serving image](../../../03-features/decision-model-serving-image/).
 
 Decider answers bounded questions about supplied state: `choice` selects a named
 option, `noul` returns P(true), and `score` rates state on an ordered rubric.
@@ -15,17 +18,24 @@ handler.
 - AWS credentials with SageMaker hosting, S3 artifact, and `iam:PassRole`
   permissions, plus permission to inspect the execution role.
 - A SageMaker execution role that trusts `sagemaker.amazonaws.com` and can read
-  the artifact bucket, pull the AWS inference container, and write inference
-  logs. Set `SAGEMAKER_EXECUTION_ROLE_ARN` when the notebook's own role is not a
-  SageMaker execution role.
-- Quota for one `ml.g5.xlarge` real-time endpoint.
-- Outbound access from the container to PyPI, the PyTorch wheel index, GitHub,
-  and Hugging Face during startup. The example uses public, ungated artifacts
-  and does not require a Hugging Face token.
+  the artifact bucket, pull the serving image from your Amazon ECR, and write
+  inference logs. Set `SAGEMAKER_EXECUTION_ROLE_ARN` when the notebook's own role
+  is not a SageMaker execution role.
+- An AWS CodeBuild service role for the image build; set `CODEBUILD_ROLE_ARN`. See
+  the [serving image README](../../../03-features/decision-model-serving-image/README.md#build)
+  for its permissions. The notebook's caller also needs permission to create the
+  ECR repository and the CodeBuild project. Set `SAGEMAKER_INFERENCE_IMAGE_URI`
+  instead to reuse an image you already built.
+- Quota for one `ml.g5.xlarge` or `ml.g6.xlarge` real-time endpoint.
+- Outbound access from the container to GitHub and Hugging Face during startup
+  (the default notebook). The example uses public, ungated artifacts and does
+  not require a Hugging Face token.
 
-The example was validated in `us-east-1`. For another commercial AWS Region,
-verify the availability of the specified DLC and instance type. The notebook
-accepts `SAGEMAKER_INFERENCE_IMAGE_URI` to override the image.
+The notebooks were validated in `eu-west-1`. `SAGEMAKER_INSTANCE_TYPES` sets the
+instance types in priority order (default `ml.g5.xlarge,ml.g6.xlarge`). With more
+than one, the endpoint uses a
+[capacity-aware instance pool](../../../03-features/capacity-aware-instance-pool/),
+available in 16 commercial Regions; in other Regions set a single instance type.
 
 ## Run the example
 
@@ -46,7 +56,7 @@ It uses `boto3` directly, without requiring SageMaker Python SDK v2.
 |---|---|
 | `deploy_strands_decider_2b_sagemaker.ipynb` | Setup, package, deploy, invoke, validate, and clean up |
 | `inference.py` | SageMaker `model_fn` / `transform_fn` adapter for the official Decider engine |
-| `requirements.txt` | Container dependencies and pinned upstream runtime source |
+| `requirements.txt` | The pinned upstream Decider runtime source; the serving image provides PyTorch and the other libraries |
 | `example-request.json` | Tool-call readiness example containing all three question types |
 | `deploy_strands_decider_2b_sagemaker_network_isolated.ipynb` | The same deployment with `EnableNetworkIsolation=True`; see [Network-isolated deployment](#network-isolated-deployment) |
 | `package_offline.py` | Stages the wheels and pinned model files for the network-isolated notebook |
@@ -64,14 +74,13 @@ It deploys the same image, adapter, pins, and revisions with these changes:
 | | Default | Network-isolated |
 |---|---|---|
 | Container network | Outbound internet at startup | `EnableNetworkIsolation=True` |
-| Python packages | Installed from PyPI and the PyTorch index at startup | Installed with `--no-index` from wheels staged in S3 |
+| Python packages | Decider runtime installed from GitHub at startup; the rest is in the serving image | Decider runtime and `huggingface_hub` installed with `--no-index` from wheels staged in S3 |
 | Decider runtime | Pinned source archive from GitHub; `direct_url.json` checked | Wheel built from the same pinned archive; SHA-256 checked against `code/provenance.json` |
 | Checkpoint and base weights | Downloaded from Hugging Face at startup | Staged in S3 as a Hugging Face cache; read with `HF_HUB_OFFLINE=1` |
-| Model data | `model.tar.gz` (code only) | Uncompressed S3 prefix (code, about 3 GB of wheels, and 4.6 GB of weights) |
+| Model data | `model.tar.gz` (code only) | Uncompressed S3 prefix (code, two wheels, and 4.6 GB of weights) |
 
 The notebook environment, not the endpoint, needs internet access while staging. It
-downloads about 7.6 GB (about 3 GB of wheels and 4.6 GB of weights); allow about 8 GB
-of free disk. Staging pins the container's `huggingface_hub` to the notebook's own
+downloads about 4.6 GB of weights; allow about 5 GB of free disk. Staging pins the container's `huggingface_hub` to the notebook's own
 version, because the offline cache layout differs across the allowed versions.
 
 The execution role needs read access to the artifact prefix, as in the default
@@ -88,8 +97,9 @@ your organization's process before upload if that is required.
 
 | Setting | Value |
 |---|---|
-| Endpoint | Real-time, one `ml.g5.xlarge` |
-| GPU | NVIDIA A10G, BF16 torso |
+| Endpoint | Real-time, one instance: `ml.g5.xlarge`, then `ml.g6.xlarge` |
+| GPU | NVIDIA A10G or L4, BF16 torso |
+| Image | Shared serving image on `pytorch:2.14-cu133-amzn2023-sagemaker` (PyTorch 2.14, CUDA 13) |
 | Model worker | One; engine access serialized |
 | Context | Strict 4,096-token checkpoint window |
 | Internal question batch | At most four questions |
@@ -127,19 +137,22 @@ application owns validation, authorization, confidence thresholds, and execution
 
 ## Container and performance scope
 
-This evaluation path uses the AWS PyTorch 2.6 inference DLC for SageMaker's
-hosting interface and installs Torch 2.7.1 / Transformers 5.17.0 / PEFT 0.21.0
-at startup. CUDA 11.8 Torch wheels are used for driver compatibility.
+The example runs on the shared serving image, built `FROM` the maintained
+`pytorch:2.14-cu133-amzn2023-sagemaker` DLC ([image entry](https://github.com/aws/deep-learning-containers/blob/main/docs/src/data/pytorch/2.14-cuda-sagemaker.yml),
+supported until September 28, 2027), with Transformers 5.17.0 and PEFT 0.21.0 pinned.
+PyTorch is no longer installed at startup. The DLC's CUDA forward compatibility lets the
+image run on the default SageMaker GPU AMI. The previous path used the PyTorch 2.6
+inference DLC, which reached end of support on June 30, 2026.
 
-The [AWS image entry](https://github.com/aws/deep-learning-containers/blob/main/docs/src/data/pytorch-inference/2.6-gpu-sagemaker.yml)
-records June 30, 2026 as the base image's end of support. The upgraded runtime
-does not extend support for the base image. Use this example for evaluation;
-production packaging requires a maintained container and dependency review.
+In `eu-west-1` on `ml.g6.xlarge`, the example request returns the same answers as on the
+2.6 path within 0.004, and median warm server latency is about 150 ms (about 125 ms
+before). The image is about 10 GB compressed because the base DLC carries the PyTorch
+training stack. Review dependencies before production use.
 
 The optional `flash-linear-attention` and `causal-conv1d` kernels are absent.
 Inference uses the reference fallbacks, so measured latency is not directly
 comparable with the authors' optimized GPU benchmarks. Startup downloads the
-runtime source and model weights.
+runtime source and model weights in the default notebook.
 
 ## Cleanup
 
