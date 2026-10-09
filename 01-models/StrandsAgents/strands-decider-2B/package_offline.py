@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: MIT-0
 """Stage everything the endpoint needs, so it can run with network isolation.
 
-The default notebook lets the container download its Python packages and the model
+The default notebook lets the container download the Decider runtime and the model
 weights at startup. A network-isolated container cannot reach PyPI, GitHub, or Hugging
 Face, so this module stages them ahead of time into one directory that SageMaker AI
 downloads from Amazon S3 before the container starts:
 
     code/inference.py           the same adapter as the default deployment
     code/requirements.txt       installs only from code/wheels (no index)
-    code/wheels/                Linux x86_64 / CPython 3.12 wheels, including Decider
+    code/wheels/                the Decider runtime and huggingface_hub wheels (the serving
+                                image provides PyTorch and the other libraries)
     code/provenance.json        pinned source URL and SHA-256 of the bundled Decider wheel
     hf-cache/                   a Hugging Face cache with the pinned checkpoint and base
 """
@@ -37,7 +38,7 @@ CHECKPOINT_FILES = [
     "tokenizer.json", "tokenizer_config.json", "chat_template.jinja",
     "provenance.json", "MANIFEST.sha256", "LICENSE.md",
 ]
-# The AWS PyTorch inference DLC used by this example runs CPython 3.12 on x86_64 Linux.
+# The serving image (PyTorch 2.14 DLC on Amazon Linux 2023) runs CPython 3.12 on x86_64 Linux.
 PLATFORM_ARGS = [
     "--only-binary=:all:", "--implementation", "cp", "--python-version", "3.12",
     "--abi", "cp312", "--platform", "manylinux_2_28_x86_64",
@@ -108,40 +109,40 @@ def stage(example_dir: Path, stage_dir: Path) -> dict:
     wheels.mkdir(parents=True)
     shutil.copy(example_dir / "inference.py", code / "inference.py")
 
-    # 1. Decider itself: build a wheel from the pinned source archive.
+    # 1. Decider itself: build a wheel from the pinned source archive. Its dependencies
+    #    (PyTorch, transformers, peft, ...) come from the serving image.
     pip("wheel", "--no-deps", "--quiet", "--wheel-dir", str(wheels), SOURCE_URL)
     decider_wheel = next(wheels.glob("strands_decider-*.whl"))
     decider_version = decider_wheel.name.split("-")[1]
 
-    # 2. Everything else: the default requirements, resolved for the container's platform.
+    # 2. huggingface_hub at this notebook's version: the container reads the cache this
+    #    notebook writes, and the cache layout differs across huggingface_hub versions.
+    hub_pin = f"huggingface_hub=={huggingface_hub.__version__}"
+    pip("download", "--quiet", "--no-deps", "--dest", str(wheels), *PLATFORM_ARGS, hub_pin)
+
+    # 3. Any other pins in requirements.txt, resolved for the container's platform.
     lines = (example_dir / "requirements.txt").read_text().splitlines()
     index_args = [a for line in lines if line.startswith("--extra-index-url") for a in line.split()]
-    pins = [line for line in lines if line.strip() and not line.startswith("--")
-            and not line.startswith("strands-decider")]
-    # The container reads the cache this notebook writes, so it must run the same
-    # huggingface_hub version: cache layouts differ between versions in the allowed range.
-    pins = [f"huggingface_hub=={huggingface_hub.__version__}" if p.startswith("huggingface_hub") else p
-            for p in pins]
-    pip("download", "--quiet", "--dest", str(wheels), *PLATFORM_ARGS, *index_args,
-        *pins, str(decider_wheel))
-    top_level = [*pins, f"strands-decider=={decider_version}"]
-    for _ in range(5):  # add Linux-only dependencies that pip skipped on this machine
-        missing = missing_for_target(wheels, top_level)
-        if not missing:
-            break
-        pip("download", "--quiet", "--dest", str(wheels), *PLATFORM_ARGS, *index_args, *sorted(missing))
-    else:
-        raise RuntimeError(f"Could not resolve wheels for: {sorted(missing)}")
+    pins = [line for line in lines if line.strip() and not line.startswith(("--", "#", "strands-decider"))]
+    if pins:
+        pip("download", "--quiet", "--dest", str(wheels), *PLATFORM_ARGS, *index_args, *pins)
+        for _ in range(5):  # add Linux-only dependencies that pip skipped on this machine
+            missing = missing_for_target(wheels, pins)
+            if not missing:
+                break
+            pip("download", "--quiet", "--dest", str(wheels), *PLATFORM_ARGS, *index_args, *sorted(missing))
+        else:
+            raise RuntimeError(f"Could not resolve wheels for: {sorted(missing)}")
 
-    # 3. Offline requirements: the same pins, installed from code/wheels only.
+    # 4. Offline requirements: installed from code/wheels only, on top of the serving image.
     (code / "requirements.txt").write_text("\n".join(
-        ["--no-index", "--find-links /opt/ml/model/code/wheels", *pins,
+        ["--no-index", "--find-links /opt/ml/model/code/wheels", *pins, hub_pin,
          f"strands-decider=={decider_version}", ""]))
     provenance = {"source_url": SOURCE_URL, "wheel": decider_wheel.name,
                   "version": decider_version, "sha256": sha256(decider_wheel)}
     (code / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
 
-    # 4. Weights: the pinned checkpoint and base revision as a Hugging Face cache, so the
+    # 5. Weights: the pinned checkpoint and base revision as a Hugging Face cache, so the
     #    adapter's revision-pinned lookups resolve locally with HF_HUB_OFFLINE=1. S3 has no
     #    symlinks, so keep only each repo's snapshot (as plain files, moved rather than
     #    copied to keep peak disk near the final size) and, where this huggingface_hub
