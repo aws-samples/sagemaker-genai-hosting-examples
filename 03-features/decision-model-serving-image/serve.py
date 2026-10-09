@@ -11,9 +11,13 @@ Mirrors the parts of the SageMaker PyTorch inference toolkit the decision-model 
 3. Serve GET /ping and POST /invocations on port 8080 with one process. Requests go to
    transform_fn; GenericInferenceToolkitError keeps its HTTP status, so a 422 from the
    adapter still reaches the caller as a ModelError with OriginalStatusCode 422.
+4. If transform_fn accepts a `context` argument, pass an object with the one method the
+   TorchServe context offers that these adapters use, set_response_status(), so an
+   adapter can return a JSON body with a non-200 status.
 """
 
 import importlib.util
+import inspect
 import os
 import subprocess
 import sys
@@ -44,9 +48,20 @@ def load_adapter():
     return module
 
 
+class Context:
+    """The part of the TorchServe request context that adapters use to set a response status."""
+
+    def __init__(self) -> None:
+        self.status = 200
+
+    def set_response_status(self, code: int = 200, phrase: str = "", ts_stream_next: bool = False) -> None:
+        self.status = code
+
+
 install_requirements()
 adapter = load_adapter()
 model = adapter.model_fn(MODEL_DIR)
+accepts_context = "context" in inspect.signature(adapter.transform_fn).parameters
 app = FastAPI()
 
 
@@ -60,12 +75,14 @@ async def invocations(request: Request) -> Response:
     body = await request.body()
     content_type = request.headers.get("content-type", "application/json")
     accept = request.headers.get("accept", "application/json")
+    context = Context() if accepts_context else None
+    args = (model, body, content_type, accept) + ((context,) if accepts_context else ())
     try:
         # transform_fn is synchronous; run it in the thread pool, as FastAPI does for sync routes.
-        payload, out_type = await run_in_threadpool(adapter.transform_fn, model, body, content_type, accept)
+        payload, out_type = await run_in_threadpool(adapter.transform_fn, *args)
     except GenericInferenceToolkitError as error:
         return Response(content=error.message, status_code=error.status_code, media_type="text/plain")
-    return Response(content=payload, media_type=out_type)
+    return Response(content=payload, media_type=out_type, status_code=context.status if context else 200)
 
 
 if __name__ == "__main__":

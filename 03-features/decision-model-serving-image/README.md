@@ -1,8 +1,10 @@
 # Decision-model serving image on the PyTorch 2.14 DLC
 
-A small Amazon SageMaker AI hosting image for the decision-model samples in this repository, such as
-[Strands Decider 2B](../../01-models/StrandsAgents/strands-decider-2B/) and the CPU-hosted
-[Decision 2.0 Kai 0.6B](../../01-models/vllm-sr/Decision-2.0-Kai-0.6B-cpu/). It's built on the maintained
+A small Amazon SageMaker AI hosting image for the decision-model samples in this repository:
+[Strands Decider 2B](../../01-models/StrandsAgents/strands-decider-2B/) and
+[Decision 2.0 Sol 2B](../../01-models/vllm-sr/Decision-2.0-Sol-2B/) on GPU, and the CPU-hosted
+[Decision 2.0 Kai 0.6B](../../01-models/vllm-sr/Decision-2.0-Kai-0.6B-cpu/) and
+[Vela 2.0 0.3B](../../01-models/vllm-sr/Vela-2.0-0.3B-cpu/). It's built on the maintained
 [AWS PyTorch 2.14 SageMaker DLC](https://github.com/aws/deep-learning-containers/blob/main/docs/pytorch/index.md)
 (`pytorch:2.14-cu133-amzn2023-sagemaker` by default, or the CPU DLC; both supported until 28 September 2027).
 
@@ -20,6 +22,8 @@ This image adds only the hosting contract that the samples need:
   `transform_fn(model, body, content_type, accept)`.
 - `GenericInferenceToolkitError` keeps its HTTP status, so a 422 from an adapter still reaches the
   caller as a `ModelError` with `OriginalStatusCode` 422.
+- If the adapter's `transform_fn` accepts a `context` argument, `serve.py` passes an object with
+  `set_response_status()`, as TorchServe did, so the adapter can return a JSON body with a 422 status.
 
 The samples' adapters run unchanged.
 
