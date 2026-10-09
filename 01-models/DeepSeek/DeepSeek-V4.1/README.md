@@ -31,8 +31,11 @@ See the [model card](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash) for
 ```
 .
 ├── README.md
-├── DeepSeek-V4.1.ipynb         # deploy + inference notebook (DeepSeek-V4.1-Flash)
-└── buildspec-weights.yml       # CodeBuild: stream the weights HF Hub -> S3
+├── DeepSeek-V4.1.ipynb             # deploy + inference notebook, ml.p6-b200.48xlarge (AWS vLLM DLC)
+├── DeepSeek-V4.1-Flash-g7e.ipynb   # deploy + inference notebook, ml.g7e.48xlarge (custom image)
+├── buildspec-weights.yml           # CodeBuild: stream the weights HF Hub -> S3 (both instance types)
+├── buildspec-image-g7e.yml         # CodeBuild: build + push the g7e serving image to ECR
+└── container-g7e/                  # g7e serving image: Dockerfile, SageMaker serve/nginx, vLLM patch
 ```
 
 ## One-time setup: stage the weights to S3
@@ -98,6 +101,78 @@ Open [`DeepSeek-V4.1.ipynb`](DeepSeek-V4.1.ipynb) in SageMaker Studio (or any Ju
 | Cleanup | Delete the endpoint and associated resources |
 
 The endpoint's `inference_image` is the DLC URI `763104351884.dkr.ecr.<region>.amazonaws.com/vllm:0.30.0-gpu-py312-cu130-ubuntu24.04-sagemaker`. Cold start (image pull + weight load + engine warmup) can take up to ~60 minutes; the endpoint config sets a 3600s startup health-check timeout.
+
+## ml.g7e.48xlarge (RTX PRO 6000 Blackwell)
+
+DeepSeek-V4.1-Flash also runs on **`ml.g7e.48xlarge`** (8× NVIDIA RTX PRO 6000 Blackwell Server Edition, 96 GB each, 768 GB total, PCIe Gen5), including the full **1M-token context**. These GPUs use a different kernel family (SM120) than B200 (SM100), and the stock vLLM release does not yet start this model on them ([vllm#59203](https://github.com/vllm-project/vllm/issues/59203)), so this path uses a custom image instead of the AWS DLC.
+
+### What is different from the B200 path
+
+| | `ml.p6-b200.48xlarge` | `ml.g7e.48xlarge` |
+| :--- | :--- | :--- |
+| Notebook | `DeepSeek-V4.1.ipynb` | `DeepSeek-V4.1-Flash-g7e.ipynb` |
+| Image | AWS vLLM DLC 0.30.0 (no build) | Your ECR image from `container-g7e/` |
+| GPU memory | 8× 192 GB HBM3e | 8× 96 GB GDDR7 |
+| Required flags | — | `--block-size 64`, `--attention-config '{"indexer_kv_dtype":"fp8"}'` |
+
+The image ([`container-g7e/Dockerfile`](container-g7e/Dockerfile)) is the official **vLLM v0.31.0** release plus three changes, none of which is in a vLLM release yet:
+
+1. **FlashInfer 0.7.1rc5** — SM120 sparse attention accepts the 32-token KV pages this model's compressed layers use ([flashinfer#5197](https://github.com/flashinfer-ai/flashinfer/pull/5197)).
+2. **DeepGEMM `17ca18f7`** — SM120 indexer kernels accept 32-token pages ([DeepGEMM#14](https://github.com/vllm-project/DeepGEMM/pull/14)).
+3. **[`sm120-dsv41-block64.patch`](container-g7e/sm120-dsv41-block64.patch)** — on SM12x, the DeepSeek-V4.1 attention and indexer backends declare a 64-token KV block (vLLM v0.31.0 declares 128, which the indexer kernel rejects on SM120), plus a startup check for the FlashInfer version.
+
+### Build the image
+
+Run once from a shell with AWS credentials, in the same region as the endpoint (reuses the shell variables from *One-time setup*):
+
+```bash
+export REPO=dsv41-sm120
+export REGISTRY=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+export IMAGE=${REGISTRY}/${REPO}:v031
+aws ecr create-repository --repository-name ${REPO}
+
+# Allow the CodeBuild role (from One-time setup) to push to the repository.
+aws iam put-role-policy --role-name deepseek-v41-flash-codebuild --policy-name ecr-push \
+  --policy-document '{"Version":"2012-10-17","Statement":[
+    {"Effect":"Allow","Action":"ecr:GetAuthorizationToken","Resource":"*"},
+    {"Effect":"Allow","Action":["ecr:BatchCheckLayerAvailability","ecr:InitiateLayerUpload","ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload","ecr:PutImage","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer"],
+     "Resource":"arn:aws:ecr:'"${AWS_REGION}"':'"${ACCOUNT_ID}"':repository/'"${REPO}"'"}]}'
+
+zip -r /tmp/deepseek-v41-g7e-src.zip buildspec-image-g7e.yml container-g7e
+aws s3 cp /tmp/deepseek-v41-g7e-src.zip s3://${BUCKET}/build/deepseek-v41-g7e-src.zip
+
+aws codebuild create-project \
+  --name deepseek-v41-flash-g7e-image \
+  --source "type=S3,location=$BUCKET/build/deepseek-v41-g7e-src.zip,buildspec=buildspec-image-g7e.yml" \
+  --artifacts type=NO_ARTIFACTS \
+  --service-role "$CB_ROLE_ARN" \
+  --timeout-in-minutes 120 \
+  --environment "type=LINUX_CONTAINER,image=aws/codebuild/amazonlinux-x86_64-standard:5.0,computeType=BUILD_GENERAL1_2XLARGE,privilegedMode=true,environmentVariables=[{name=REGISTRY,value=${REGISTRY}},{name=IMAGE,value=${IMAGE}}]"
+
+aws codebuild start-build --project-name deepseek-v41-flash-g7e-image
+```
+
+The SageMaker execution role also needs `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` and `ecr:GetAuthorizationToken` to pull the image.
+
+### Deploy
+
+Open [`DeepSeek-V4.1-Flash-g7e.ipynb`](DeepSeek-V4.1-Flash-g7e.ipynb), set `weights_s3_uri`, and run the cells — the sections match the B200 notebook. Keep `SM_VLLM_BLOCK_SIZE=64` and the `indexer_kv_dtype` attention config; both are required on this GPU.
+
+### Validation and performance
+
+Validated on a `g7e.48xlarge` EC2 instance with this image and the same vLLM flags (vLLM v0.31.0 + the three changes above, TP8, FP8 KV cache, Engram offloaded):
+
+- Short-answer correctness checks pass with finite log-probabilities; needle retrieval passes at 128K, 512K and **~1.04M** tokens.
+- Throughput at 12.7K input / 5.3K output tokens per request (direct to the engine, no errors):
+
+| Concurrent requests | Time to first token | Inter-token latency | Output tokens/s (total) |
+| :--- | :--- | :--- | :--- |
+| 1 | 1.2 s | 11.2 ms | 88 |
+| 8 | 5.5 s | 18.4 ms | 413 |
+| 32 | 12.6 s | 35.3 ms | 850 |
+
+The GPUs communicate over PCIe rather than NVLink and have less memory bandwidth than B200, so per-request generation is slower than on `ml.p6-b200.48xlarge`. The SageMaker endpoint path itself (this notebook) has not been run end to end yet; the container contract (`/ping`, `/invocations`, `SM_VLLM_*`) follows the AWS vLLM DLC convention. Check that your account has quota for `ml.g7e.48xlarge for endpoint usage` (the default is 0).
 
 ## Cost
 
