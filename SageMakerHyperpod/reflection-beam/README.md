@@ -61,8 +61,8 @@ values together; a checkpoint, image, parser, quantization mode, and parallel
 layout must be compatible with each other.
 
 For the JumpStart path, `config/release.env.example` defaults to the NVFP4
-checkpoint and lists the base and FP8 model IDs as alternatives. Select the
-model ID and instance type supported by your chosen checkpoint.
+checkpoint and lists the BF16 and FP8 model IDs as alternatives. Select the
+model ID and instance type supported by your chosen checkpoint variant.
 
 The tool reads non-executable `KEY=VALUE` files. It rejects shell `export`
 syntax, credential fields, blank values, example placeholders, unpinned custom
