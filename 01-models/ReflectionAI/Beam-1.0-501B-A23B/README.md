@@ -1,12 +1,11 @@
-# Deploy Reflection Beam 1.0 NVFP4 on Amazon SageMaker AI
+# Deploy Reflection Beam 1.0 with Amazon SageMaker JumpStart
 
-This sample deploys Reflection Beam 1.0 501B-A23B NVFP4 to an Amazon SageMaker
-AI real-time endpoint, invokes it, runs a bounded smoke test, and cleans up the
-endpoint.
+This sample deploys the BF16, FP8, or NVFP4 variant of Reflection Beam 1.0
+501B-A23B to an Amazon SageMaker AI real-time endpoint, invokes it, runs a
+bounded smoke test, and cleans up the endpoint.
 
-The sample uses the
-`huggingface-llm-beam-1-0-501b-a23b-nvfp4` model ID with
-`SageMakerPublicHub`.
+The sample uses the released model IDs from `SageMakerPublicHub`. It defaults to
+NVFP4; use `--variant fp8` or `--variant bf16` to select another variant.
 
 ## Prerequisites
 
@@ -36,34 +35,43 @@ The sample uses the
 
    The requirements file installs `sagemaker>=2.257.7,<3`.
 
-## Choose the model ID
+## Choose the checkpoint variant
 
-The sample is configured for the NVFP4 checkpoint. To use another Beam
-checkpoint, replace `JUMPSTART_MODEL_ID` in `jumpstart_real_time.py` with one of
-these published IDs and select a supported instance type:
+Choose the variant that matches your GPU hardware, memory requirements, and
+performance goals. The script maps each CLI value to its published JumpStart
+model ID:
 
-| Checkpoint | JumpStart model ID |
-|---|---|
-| 501B-A23B | `huggingface-llm-beam-1-0-501b-a23b` |
-| 501B-A23B FP8 | `huggingface-llm-beam-1-0-501b-a23b-fp8` |
-| 501B-A23B NVFP4 | `huggingface-llm-beam-1-0-501b-a23b-nvfp4` |
+| Variant | CLI value | JumpStart model ID |
+|---|---|---|
+| BF16 | `bf16` | `huggingface-llm-beam-1-0-501b-a23b` |
+| FP8 | `fp8` | `huggingface-llm-beam-1-0-501b-a23b-fp8` |
+| NVFP4 | `nvfp4` | `huggingface-llm-beam-1-0-501b-a23b-nvfp4` |
 
 Keep credentials, account IDs, role ARNs, and endpoint names out of the source
 file.
 
 ## Run the lifecycle CLI
 
-1. **Run the deploy, smoke-test, and cleanup lifecycle.**
+1. **Run the deploy, smoke-test, and cleanup lifecycle with the default NVFP4 variant.**
 
    ```bash
    python jumpstart_real_time.py \
      --endpoint-name reflection-beam-smoke
    ```
 
-2. **Set a different positive startup timeout only when the released model requires it.**
+2. **Select FP8 when your target configuration supports that variant.**
 
    ```bash
    python jumpstart_real_time.py \
+     --variant fp8 \
+     --endpoint-name reflection-beam-fp8-smoke
+   ```
+
+3. **Set a different positive startup timeout only when the released model requires it.**
+
+   ```bash
+   python jumpstart_real_time.py \
+     --variant nvfp4 \
      --endpoint-name reflection-beam-smoke \
      --timeout-seconds 1200
    ```
@@ -83,11 +91,11 @@ need to keep an endpoint running.
 
 | Function | Behavior |
 |---|---|
-| `deploy_endpoint(sagemaker_session=None, endpoint_name=None, timeout_seconds=900)` | Validates the public model ID and positive timeout, creates a `JumpStartModel`, deploys it synchronously, and returns its predictor. |
+| `deploy_endpoint(sagemaker_session=None, endpoint_name=None, timeout_seconds=900, variant="nvfp4")` | Resolves the selected public model ID, validates the positive timeout, creates a `JumpStartModel`, deploys it synchronously, and returns its predictor. |
 | `invoke_endpoint(predictor, prompt, max_tokens=64, timeout_seconds=120)` | Sends one chat request with bounded connection and read timeouts, then returns `choices[0].message.content` as text. |
 | `smoke_test(predictor)` | Requests a short greeting with at most 64 output tokens and rejects empty output. |
 | `cleanup_endpoint(predictor)` | Requests endpoint deletion, waits for deletion to complete, then deletes the endpoint configuration and model. Passing `None` is safe. |
-| `run_lifecycle(sagemaker_session=None, endpoint_name=None, timeout_seconds=900)` | Deploys, smoke tests, and calls cleanup from `finally` on success or smoke-test failure. |
+| `run_lifecycle(sagemaker_session=None, endpoint_name=None, timeout_seconds=900, variant="nvfp4")` | Deploys the selected variant, smoke tests it, and calls cleanup from `finally` on success or smoke-test failure. |
 
 Use `try` and `finally` when you call the functions independently:
 

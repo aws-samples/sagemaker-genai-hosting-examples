@@ -15,15 +15,27 @@ except ModuleNotFoundError:
     JumpStartModel = None  # type: ignore[assignment,misc]
 
 
-JUMPSTART_MODEL_ID = "huggingface-llm-beam-1-0-501b-a23b-nvfp4"
+JUMPSTART_MODEL_IDS = {
+    "bf16": "huggingface-llm-beam-1-0-501b-a23b",
+    "fp8": "huggingface-llm-beam-1-0-501b-a23b-fp8",
+    "nvfp4": "huggingface-llm-beam-1-0-501b-a23b-nvfp4",
+}
+DEFAULT_VARIANT = "nvfp4"
 WAITER_DELAY_SECONDS = 15
 
 
-def _require_model_id() -> str:
-    model_id = JUMPSTART_MODEL_ID.strip()
+def _resolve_model_id(variant: str) -> str:
+    if not isinstance(variant, str) or not variant.strip():
+        raise ValueError("variant must be one of: bf16, fp8, nvfp4.")
+    normalized_variant = variant.strip().lower()
+    try:
+        model_id = JUMPSTART_MODEL_IDS[normalized_variant].strip()
+    except KeyError:
+        raise ValueError("variant must be one of: bf16, fp8, nvfp4.") from None
     if not model_id or model_id.startswith("REPLACE_WITH_"):
         raise ValueError(
-            "JUMPSTART_MODEL_ID must contain a supported Beam JumpStart model ID."
+            f"The {normalized_variant} variant must contain a supported "
+            "Beam JumpStart model ID."
         )
     return model_id
 
@@ -60,9 +72,10 @@ def deploy_endpoint(
     sagemaker_session: Any = None,
     endpoint_name: str | None = None,
     timeout_seconds: int = 900,
+    variant: str = DEFAULT_VARIANT,
 ) -> Any:
     """Deploy the configured Beam JumpStart model to a real-time endpoint."""
-    model_id = _require_model_id()
+    model_id = _resolve_model_id(variant)
     timeout = _require_positive_integer(timeout_seconds, "timeout_seconds")
     resolved_endpoint_name = _resolve_endpoint_name(endpoint_name)
     if JumpStartModel is None:
@@ -268,15 +281,17 @@ def run_lifecycle(
     sagemaker_session: Any = None,
     endpoint_name: str | None = None,
     timeout_seconds: int = 900,
+    variant: str = DEFAULT_VARIANT,
 ) -> str:
     """Deploy Beam, run a smoke test, and always clean up the endpoint."""
-    _require_model_id()
+    _resolve_model_id(variant)
     predictor = None
     try:
         predictor = deploy_endpoint(
             sagemaker_session=sagemaker_session,
             endpoint_name=endpoint_name,
             timeout_seconds=timeout_seconds,
+            variant=variant,
         )
         return smoke_test(predictor)
     finally:
@@ -289,12 +304,19 @@ def main() -> int:
     )
     parser.add_argument("--endpoint-name")
     parser.add_argument("--timeout-seconds", type=int, default=900)
+    parser.add_argument(
+        "--variant",
+        choices=tuple(JUMPSTART_MODEL_IDS),
+        default=DEFAULT_VARIANT,
+        help="Beam checkpoint variant to deploy (default: nvfp4).",
+    )
     args = parser.parse_args()
 
     try:
         output = run_lifecycle(
             endpoint_name=args.endpoint_name,
             timeout_seconds=args.timeout_seconds,
+            variant=args.variant,
         )
     except (RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)

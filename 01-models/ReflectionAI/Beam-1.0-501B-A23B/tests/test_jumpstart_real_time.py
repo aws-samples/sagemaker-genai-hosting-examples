@@ -62,23 +62,22 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
                 }
             }
 
-    def test_exposes_exactly_one_configured_model_id(self):
+    def test_exposes_the_three_published_checkpoint_variants(self):
         # Arrange / Act
         sample, _ = _load_sample_module()
-        public_model_id_names = [
-            name
-            for name in vars(sample)
-            if name.isupper() and name.endswith("MODEL_ID") and not name.startswith("_")
-        ]
 
         # Assert
-        self.assertEqual(public_model_id_names, ["JUMPSTART_MODEL_ID"])
         self.assertEqual(
-            sample.JUMPSTART_MODEL_ID,
-            "huggingface-llm-beam-1-0-501b-a23b-nvfp4",
+            sample.JUMPSTART_MODEL_IDS,
+            {
+                "bf16": "huggingface-llm-beam-1-0-501b-a23b",
+                "fp8": "huggingface-llm-beam-1-0-501b-a23b-fp8",
+                "nvfp4": "huggingface-llm-beam-1-0-501b-a23b-nvfp4",
+            },
         )
+        self.assertEqual(sample.DEFAULT_VARIANT, "nvfp4")
 
-    def test_source_defines_only_the_configured_model_id(self):
+    def test_source_defines_only_the_published_model_ids(self):
         # Arrange
         self.assertTrue(
             SAMPLE_MODULE_PATH.is_file(),
@@ -87,19 +86,15 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         # Act
         source = SAMPLE_MODULE_PATH.read_text(encoding="utf-8")
-        model_id_assignments = re.findall(
-            (
-                r"""(?m)^JUMPSTART_MODEL_ID(?:\s*:\s*str)?\s*=\s*"""
-                r"""(["'][^"']*["'])\s*$"""
-            ),
-            source,
-        )
 
         # Assert
-        self.assertEqual(
-            model_id_assignments,
-            ['"huggingface-llm-beam-1-0-501b-a23b-nvfp4"'],
-        )
+        for model_id in (
+            "huggingface-llm-beam-1-0-501b-a23b",
+            "huggingface-llm-beam-1-0-501b-a23b-fp8",
+            "huggingface-llm-beam-1-0-501b-a23b-nvfp4",
+        ):
+            with self.subTest(model_id=model_id):
+                self.assertEqual(source.count(f'"{model_id}"'), 1)
         self.assertNotRegex(
             source,
             r"""os\.(?:environ\.get|getenv)\(\s*["'][^"']*MODEL_ID["']""",
@@ -138,20 +133,16 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         predictor.endpoint_name = "beam-smoke-test"
 
         # Act
-        with patch.object(
-            sample,
-            "JUMPSTART_MODEL_ID",
-            "public-jumpstart-model-id",
-        ):
-            result = sample.deploy_endpoint(
-                sagemaker_session=session,
-                endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
-            )
+        result = sample.deploy_endpoint(
+            sagemaker_session=session,
+            endpoint_name="beam-smoke-test",
+            timeout_seconds=900,
+            variant="fp8",
+        )
 
         # Assert
         jumpstart_model_class.assert_called_once_with(
-            model_id="public-jumpstart-model-id",
+            model_id="huggingface-llm-beam-1-0-501b-a23b-fp8",
             sagemaker_session=session,
         )
         model.deploy.assert_called_once_with(
@@ -178,11 +169,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         with (
             patch.object(
                 sample,
-                "JUMPSTART_MODEL_ID",
-                "public-jumpstart-model-id",
-            ),
-            patch.object(
-                sample,
                 "_resolve_endpoint_name",
                 return_value="reflection-beam-generated",
             ),
@@ -202,10 +188,14 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         # Act / Assert
         with (
-            patch.object(sample, "JUMPSTART_MODEL_ID", "REPLACE_WITH_MODEL_ID"),
+            patch.object(
+                sample,
+                "JUMPSTART_MODEL_IDS",
+                {"nvfp4": "REPLACE_WITH_MODEL_ID"},
+            ),
             self.assertRaisesRegex(
                 ValueError,
-                r"(?i)JUMPSTART_MODEL_ID.*supported",
+                r"(?i)nvfp4 variant.*supported",
             ),
         ):
             sample.deploy_endpoint(
@@ -224,11 +214,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         waiter.wait.side_effect = KeyboardInterrupt()
 
         with (
-            patch.object(
-                sample,
-                "JUMPSTART_MODEL_ID",
-                "public-jumpstart-model-id",
-            ),
             patch.object(sample, "cleanup_endpoint") as cleanup,
             self.assertRaises(KeyboardInterrupt),
         ):
@@ -256,11 +241,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         with (
             patch.object(
                 sample,
-                "JUMPSTART_MODEL_ID",
-                "public-jumpstart-model-id",
-            ),
-            patch.object(
-                sample,
                 "cleanup_endpoint",
                 side_effect=RuntimeError("endpoint deletion failed"),
             ),
@@ -280,10 +260,14 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         # Act / Assert
         with (
-            patch.object(sample, "JUMPSTART_MODEL_ID", "REPLACE_WITH_MODEL_ID"),
+            patch.object(
+                sample,
+                "JUMPSTART_MODEL_IDS",
+                {"nvfp4": "REPLACE_WITH_MODEL_ID"},
+            ),
             self.assertRaisesRegex(
                 ValueError,
-                r"(?i)JUMPSTART_MODEL_ID.*supported",
+                r"(?i)nvfp4 variant.*supported",
             ),
         ):
             sample.run_lifecycle(
@@ -298,18 +282,24 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         sample, jumpstart_model_class = _load_sample_module()
 
         # Act / Assert
-        with patch.object(
-            sample,
-            "JUMPSTART_MODEL_ID",
-            "public-jumpstart-model-id",
-        ):
-            for timeout_seconds in (None, 0, -1):
-                with self.subTest(timeout_seconds=timeout_seconds):
-                    with self.assertRaisesRegex(ValueError, "timeout_seconds"):
-                        sample.deploy_endpoint(
-                            sagemaker_session=Mock(name="sagemaker_session"),
-                            timeout_seconds=timeout_seconds,
-                        )
+        for timeout_seconds in (None, 0, -1):
+            with self.subTest(timeout_seconds=timeout_seconds):
+                with self.assertRaisesRegex(ValueError, "timeout_seconds"):
+                    sample.deploy_endpoint(
+                        sagemaker_session=Mock(name="sagemaker_session"),
+                        timeout_seconds=timeout_seconds,
+                    )
+        jumpstart_model_class.assert_not_called()
+
+    def test_deploy_rejects_an_unknown_variant_before_aws_call(self):
+        sample, jumpstart_model_class = _load_sample_module()
+
+        with self.assertRaisesRegex(ValueError, "bf16, fp8, nvfp4"):
+            sample.deploy_endpoint(
+                sagemaker_session=Mock(name="sagemaker_session"),
+                variant="int8",
+            )
+
         jumpstart_model_class.assert_not_called()
 
     def test_invoke_sends_a_bounded_chat_request_and_returns_text(self):
@@ -489,11 +479,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         # Act
         with (
-            patch.object(
-                sample,
-                "JUMPSTART_MODEL_ID",
-                "public-jumpstart-model-id",
-            ),
             patch.object(sample, "deploy_endpoint", return_value=predictor) as deploy,
             patch.object(sample, "smoke_test", return_value="Beam is ready.") as smoke,
             patch.object(sample, "cleanup_endpoint") as cleanup,
@@ -502,6 +487,7 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
                 sagemaker_session=session,
                 endpoint_name="beam-smoke-test",
                 timeout_seconds=900,
+                variant="fp8",
             )
 
         # Assert
@@ -509,6 +495,7 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             sagemaker_session=session,
             endpoint_name="beam-smoke-test",
             timeout_seconds=900,
+            variant="fp8",
         )
         smoke.assert_called_once_with(predictor)
         cleanup.assert_called_once_with(predictor)
@@ -522,11 +509,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         # Act / Assert
         with (
-            patch.object(
-                sample,
-                "JUMPSTART_MODEL_ID",
-                "public-jumpstart-model-id",
-            ),
             patch.object(sample, "deploy_endpoint", return_value=predictor),
             patch.object(sample, "smoke_test", side_effect=expected_error),
             patch.object(sample, "cleanup_endpoint") as cleanup,
