@@ -1,0 +1,5 @@
+# Nothing to install at startup. The shared decision-model serving image, built on the
+# PyTorch 2.14 CPU SageMaker DLC, already pins torch 2.14 (CPU), transformers 5.17.0,
+# huggingface_hub 1.33.0, safetensors, accelerate, and sagemaker-inference. The Decision 2.0
+# runtime itself ships inside the pinned model repository (decision2/) and is verified
+# against MODEL_MANIFEST.json by the model's remote code.

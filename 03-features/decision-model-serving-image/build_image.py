@@ -57,14 +57,20 @@ def ensure_bucket(s3, bucket: str, region: str) -> None:
 def build_image(*, region: str, bucket: str, codebuild_role_arn: str,
                 repository_name: str = "decision-model-serving",
                 project_name: str = "decision-model-serving-build",
-                image_tag: str | None = None, poll_seconds: int = 20) -> str:
-    """Start the build, wait for it, and return the image URI pinned by digest."""
+                image_tag: str | None = None, base_image: str | None = None,
+                tag_prefix: str = "pt214", poll_seconds: int = 20) -> str:
+    """Start the build, wait for it, and return the image URI pinned by digest.
+
+    ``base_image`` overrides the Dockerfile's default CUDA base (``BASE_IMAGE`` build
+    argument), for example the PyTorch 2.14 CPU SageMaker DLC for CPU endpoints.
+    ``tag_prefix`` distinguishes variants in the shared repository (``pt214-cpu`` for CPU).
+    """
     import boto3
 
     session = boto3.Session(region_name=region)
     s3, ecr, codebuild = session.client("s3"), session.client("ecr"), session.client("codebuild")
     account_id = session.client("sts").get_caller_identity()["Account"]
-    image_tag = image_tag or datetime.now(timezone.utc).strftime("pt214-%Y%m%d%H%M%S")
+    image_tag = image_tag or datetime.now(timezone.utc).strftime(f"{tag_prefix}-%Y%m%d%H%M%S")
     try:
         ecr.describe_repositories(repositoryNames=[repository_name])
     except ecr.exceptions.RepositoryNotFoundException:
@@ -89,6 +95,8 @@ def build_image(*, region: str, bucket: str, codebuild_role_arn: str,
                 "environmentVariables": [
                     {"name": "ECR_REPOSITORY_URI", "value": ecr_uri},
                     {"name": "IMAGE_TAG", "value": image_tag},
+                    # Empty keeps the Dockerfile's default base image.
+                    {"name": "BASE_IMAGE", "value": base_image or ""},
                 ],
             },
             "serviceRole": codebuild_role_arn,
@@ -119,10 +127,13 @@ def main() -> None:
     parser.add_argument("--codebuild-role-arn", required=True)
     parser.add_argument("--repository-name", default="decision-model-serving")
     parser.add_argument("--image-tag")
+    parser.add_argument("--base-image", help="Dockerfile BASE_IMAGE override, e.g. the PyTorch 2.14 CPU DLC")
+    parser.add_argument("--tag-prefix", default="pt214", help="Prefix of the generated image tag")
     args = parser.parse_args()
     print(json.dumps({"image_uri": build_image(
         region=args.region, bucket=args.bucket, codebuild_role_arn=args.codebuild_role_arn,
-        repository_name=args.repository_name, image_tag=args.image_tag)}, indent=2))
+        repository_name=args.repository_name, image_tag=args.image_tag,
+        base_image=args.base_image, tag_prefix=args.tag_prefix)}, indent=2))
 
 
 if __name__ == "__main__":

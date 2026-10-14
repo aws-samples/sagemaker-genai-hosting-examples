@@ -13,7 +13,8 @@ phases:
       - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
   build:
     commands:
-      - docker build --platform linux/amd64 --pull -t "${ECR_REPOSITORY_URI}:${IMAGE_TAG}" .
+      # BASE_IMAGE, when set, overrides the Dockerfile's default CUDA base (e.g. the CPU DLC).
+      - docker build --platform linux/amd64 --pull ${BASE_IMAGE:+--build-arg "BASE_IMAGE=${BASE_IMAGE}"} -t "${ECR_REPOSITORY_URI}:${IMAGE_TAG}" .
   post_build:
     commands:
       - docker push "${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
