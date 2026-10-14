@@ -1,0 +1,67 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: InferenceEndpointConfig
+metadata:
+  name: reflection-beam-vllm
+  namespace: "${BEAM_NAMESPACE}"
+spec:
+  modelName: Reflection-Beam-vLLM
+  instanceType: "${VLLM_INSTANCE_TYPE}"
+  invocationEndpoint: v1/chat/completions
+  replicas: 1
+  loadBalancer:
+    healthCheckPath: /health
+    routingAlgorithm: least_outstanding_requests
+  modelSourceConfig:
+    modelSourceType: huggingface
+    prefetchEnabled: false
+    huggingFaceModel:
+      modelId: "${VLLM_MODEL_ID}"
+      commitSHA: "${VLLM_MODEL_COMMIT_SHA}"
+  worker:
+    image: "${VLLM_IMAGE}"
+    args:
+      - --model
+      - /opt/ml/model
+      - --served-model-name
+      - reflection-beam
+      - --tensor-parallel-size
+      - "${VLLM_TENSOR_PARALLEL_SIZE}"
+      - --enable-expert-parallel
+      - --enable-auto-tool-choice
+      - --reasoning-parser
+      - "${VLLM_REASONING_PARSER}"
+      - --tool-call-parser
+      - "${VLLM_TOOL_CALL_PARSER}"
+    modelInvocationPort:
+      containerPort: 8000
+      name: http
+    modelVolumeMount:
+      mountPath: /opt/ml/model
+      name: model-weights
+    resources:
+      limits:
+        nvidia.com/gpu: "${VLLM_GPU_COUNT}"
+      requests:
+        nvidia.com/gpu: "${VLLM_GPU_COUNT}"
+    probes:
+      startupProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 360
+        periodSeconds: 10
+        timeoutSeconds: 5
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 12
+        periodSeconds: 10
+        timeoutSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 12
+        periodSeconds: 30
+        timeoutSeconds: 5

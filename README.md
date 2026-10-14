@@ -20,6 +20,7 @@ If you are contributing, please add a link to your model below:
 - [Kimi-K2.7-Code](./01-models/Kimi/Kimi-K2.7-Code/)
 - [Strands Decider 2B](./01-models/StrandsAgents/strands-decider-2B/)
 - [Decision 2.0 Sol 2B](./01-models/vllm-sr/Decision-2.0-Sol-2B/)
+- [Reflection Beam on SageMaker HyperPod Inference](./SageMakerHyperpod/reflection-beam/)
 
 ## Additional Resources
 
@@ -39,4 +40,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the [LICENSE](./LICENSE) file.
-

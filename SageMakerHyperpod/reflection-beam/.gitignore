@@ -1,0 +1,4 @@
+.ruff_cache/
+config/*.env
+config/*.json
+!config/*.env.example
