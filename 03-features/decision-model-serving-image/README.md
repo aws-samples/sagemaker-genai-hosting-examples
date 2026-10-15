@@ -21,11 +21,27 @@ This image adds only the hosting contract that the samples need:
   loads the model once with `model_fn("/opt/ml/model")`, and passes each request to
   `transform_fn(model, body, content_type, accept)`.
 - `GenericInferenceToolkitError` keeps its HTTP status, so a 422 from an adapter still reaches the
-  caller as a `ModelError` with `OriginalStatusCode` 422.
-- If the adapter's `transform_fn` accepts a `context` argument, `serve.py` passes an object with
-  `set_response_status()`, as TorchServe did, so the adapter can return a JSON body with a 422 status.
+  caller as a `ModelError` with `OriginalStatusCode` 422. An error message that is itself a JSON
+  object or array is returned as `application/json`, so an adapter that reports a structured error
+  (Sol and Kai for `max_length_exceeded`, Vela for `too_long`) keeps its body and its media type.
 
 The samples' adapters run unchanged.
+
+## Per-request timeout
+
+`SAGEMAKER_MODEL_SERVER_TIMEOUT` (a number of seconds) bounds how long a caller waits for one
+request: when it expires the server answers `504` with a JSON body. Unset, or `0`, waits as long as
+the caller does, and a value that is not a number fails at startup rather than silently. The Strands
+Decider and Sol notebooks set 60 seconds, which is how long
+[SageMaker AI allows a model container to respond](https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-inference-code.html),
+and they set their client socket timeout to the 70 seconds that page recommends alongside it.
+
+A running Python thread cannot be cancelled, so this bounds the answer, not the work. The call keeps
+running and, because the samples' adapters serialize on a lock, it holds that lock until it returns;
+requests that arrive meanwhile time out too, until it finishes. Work that timed out still runs to
+completion afterwards, in arrival order, with nobody waiting for it. So the timeout stops an
+unbounded queue of callers, not an unbounded queue of inference: bound the work as well, by limiting
+questions per request.
 
 ## GPU driver
 

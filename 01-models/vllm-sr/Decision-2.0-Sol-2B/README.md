@@ -78,6 +78,7 @@ names. It preserves the existing IAM role and shared artifact bucket. It uses
 | Worker | One process; native inference serialized |
 | Precision | Native BF16-resident eligible Linear weights; FP32 head |
 | Startup timeout | 1,800 seconds for the SageMaker container health check |
+| Request timeout | 60 seconds (`SAGEMAKER_MODEL_SERVER_TIMEOUT`); the server answers 504 |
 
 The published loader first constructs FP32 weights on the CPU and then reduces
 eligible Linear weights to BF16 before moving to the GPU. The FP32 parameter
@@ -164,6 +165,17 @@ The example runs on the shared serving image, built `FROM` the maintained
 supported until September 28, 2027), with Transformers 5.17.0 pinned. PyTorch is no longer
 installed at startup. The previous path used the PyTorch 2.6 inference DLC, which reached
 end of support on June 30, 2026.
+
+`requirements.txt` no longer pins `numpy` or `huggingface_hub`, because the image supplies
+them. The notebook asserts that what the image supplies stays inside the ranges the pinned
+remote code needs (`numpy>=1.24,<3`, `huggingface_hub>=1.5,<2`), so an image change that
+moves outside them fails the run instead of passing silently.
+
+The results here cover `ml.g6` (NVIDIA L4) and `ml.g5` (NVIDIA A10G), and the notebook
+checks the GPU against whichever of the two served. `SAGEMAKER_INSTANCE_TYPES` accepts any
+instance type, and the notebook prints a note instead of failing, but nothing here applies
+to another GPU. The model's native precision keeps BF16-resident backbone weights, which
+NVIDIA T4 (`ml.g4dn`) has no hardware support for; that combination is untested here.
 
 PyTorch 2.14 is built for CUDA 13, which ships with NVIDIA driver 580. The endpoint sets
 `InferenceAmiVersion` to `al2023-ami-sagemaker-inference-gpu-4-1`, which ships that
