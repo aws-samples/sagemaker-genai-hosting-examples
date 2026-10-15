@@ -17,6 +17,7 @@ model-provider -> model name -> code examples
 - [Decision 2.0 Sol 2B](./vllm-sr/Decision-2.0-Sol-2B/)
 - [Strands Decider 2B](./StrandsAgents/strands-decider-2B/)
 - [Kimi-K2.7-Code](./Kimi/Kimi-K2.7-Code/)
+- [Reflection Beam 1.0 501B-A23B](./ReflectionAI/Beam-1.0-501B-A23B/) - BF16, FP8, and NVFP4 variants
 
 ### 2025
 - [GLM-4.5](./Z.ai/GLM-4.5/)
