@@ -128,6 +128,22 @@ class ConfigTests(unittest.TestCase):
                 self.assertNotIn("REPLACE_WITH_", rendered)
                 self.assertIn('namespace: "default"', rendered)
 
+    def test_jumpstart_supports_pinned_and_unpinned_versions(self) -> None:
+        values = configured_values()
+        pinned = hyperpod_tool.render_manifest("jumpstart", values)
+        self.assertIn('modelVersion: "1.0.0"', pinned)
+
+        values["JUMPSTART_MODEL_VERSION"] = "latest"
+        unpinned = hyperpod_tool.render_manifest("jumpstart", values)
+        self.assertNotIn("modelVersion:", unpinned)
+        self.assertNotIn("latest", unpinned)
+
+    def test_rejects_invalid_jumpstart_version(self) -> None:
+        values = configured_values()
+        values["JUMPSTART_MODEL_VERSION"] = "1.0"
+        with self.assertRaisesRegex(hyperpod_tool.ToolError, "semantic version"):
+            hyperpod_tool.render_manifest("jumpstart", values)
+
     def test_custom_runtime_manifests_do_not_enable_expert_parallelism(self) -> None:
         values = configured_values()
         for runtime in ("sglang", "vllm"):
@@ -290,6 +306,7 @@ class SafetyTests(unittest.TestCase):
             )
             if runtime == "jumpstart":
                 self.assertIn("${JUMPSTART_MODEL_ID}", content)
+                self.assertIn("${JUMPSTART_MODEL_VERSION}", content)
                 continue
             prefix = runtime.upper()
             for suffix in release_keys:

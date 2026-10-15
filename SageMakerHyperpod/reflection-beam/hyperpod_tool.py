@@ -30,6 +30,8 @@ SAGEMAKER_ENDPOINT_RE = re.compile(
 )
 IMAGE_DIGEST_RE = re.compile(r"^[^\s@]+@sha256:[0-9a-fA-F]{64}$")
 COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+JUMPSTART_VERSION_RE = re.compile(r"^\d{1,4}\.\d{1,4}\.\d{1,4}$")
+JUMPSTART_LATEST_VERSION = "latest"
 PLACEHOLDER_PREFIXES = ("REPLACE_WITH_", "CHANGEME", "TODO")
 FORBIDDEN_CONFIG_KEYS = {
     "AWS_ACCESS_KEY_ID",
@@ -170,6 +172,15 @@ def validate_runtime_values(runtime: str, values: Mapping[str, str]) -> None:
 
     if runtime == "jumpstart":
         validate_sagemaker_endpoint_name(values["JUMPSTART_ENDPOINT_NAME"])
+        model_version = values["JUMPSTART_MODEL_VERSION"]
+        if (
+            model_version.lower() != JUMPSTART_LATEST_VERSION
+            and not JUMPSTART_VERSION_RE.fullmatch(model_version)
+        ):
+            raise ToolError(
+                "JUMPSTART_MODEL_VERSION must be a semantic version such as "
+                "1.0.0, or latest for an unpinned deployment"
+            )
         return
 
     prefix = runtime.upper()
@@ -220,6 +231,23 @@ def render_manifest(runtime: str, values: Mapping[str, str]) -> str:
     spec = RUNTIMES[runtime]
     template_path = SAMPLE_ROOT / spec.manifest
     template = template_path.read_text(encoding="utf-8")
+
+    if (
+        runtime == "jumpstart"
+        and values.get("JUMPSTART_MODEL_VERSION", "").lower()
+        == JUMPSTART_LATEST_VERSION
+    ):
+        template, substitutions = re.subn(
+            r'^[ \t]*modelVersion:[ \t]*"\$\{JUMPSTART_MODEL_VERSION\}"[ \t]*\n?',
+            "",
+            template,
+            flags=re.MULTILINE,
+        )
+        if substitutions != 1:
+            raise ToolError(
+                f"{template_path.name}: expected one modelVersion template field"
+            )
+
     tokens = sorted(set(TOKEN_RE.findall(template)))
 
     missing = [

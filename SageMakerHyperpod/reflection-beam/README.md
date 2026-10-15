@@ -91,7 +91,10 @@ built with Beam support and pin it by digest.
 
 For the JumpStart path, `config/release.env.example` defaults to the NVFP4
 checkpoint and lists the BF16 and FP8 model IDs as alternatives. Select the
-model ID and instance type supported by your chosen checkpoint variant.
+model ID and instance type supported by your chosen checkpoint variant. Keep
+`JUMPSTART_MODEL_VERSION=1.0.0` for a reproducible deployment, or set it to
+`latest` to omit `modelVersion` from the rendered manifest and resolve the
+latest available version when you deploy.
 
 The tool reads non-executable `KEY=VALUE` files. It rejects shell `export`
 syntax, credential fields, blank values, example placeholders, unpinned custom
