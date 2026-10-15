@@ -270,17 +270,17 @@ applies the patch.
 ## Clean up
 
 Cleanup requires the exact resource name as a guard against deleting the wrong
-deployment:
+deployment. The following example removes the JumpStart resource:
 
 ```bash
 python hyperpod_tool.py \
   --config config/deployment.env \
-  cleanup sglang \
-  --confirm-name reflection-beam-sglang \
+  cleanup jumpstart \
+  --confirm-name reflection-beam-jumpstart \
   --timeout-seconds 600
 ```
 
-Use one of these exact confirmations:
+Use the matching runtime and exact confirmation:
 
 | Runtime | Confirmation |
 |---|---|
