@@ -1,0 +1,14 @@
+# Installed at container startup on top of the shared decision-model serving image
+# (PyTorch 2.14 + CUDA 13 DLC: torch, torchvision, triton, pillow, numpy; the image pins
+# transformers 5.17.0, accelerate, safetensors, huggingface_hub).
+#
+# GPU kernels for the Qwen3.5 Gated DeltaNet layers, as the model's own requirements.txt
+# lists. Without them Transformers binds its slower PyTorch reference implementation; the
+# diagnostics operation reports which one is active. Depends only on einops and
+# transformers>=4.45, so the image's pins are kept.
+flash-linear-attention==0.5.2
+einops
+# Video inputs: the runtime decodes video files with OpenCV (FFmpeg). The DLC does not
+# ship it; without it video requests are refused with HTTP 422 and text and image
+# requests are unaffected.
+opencv-python-headless>=4.10,<5

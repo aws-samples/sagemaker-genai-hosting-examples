@@ -12,6 +12,7 @@ model-provider -> model name -> code examples
 ## List of models
 
 ### 2026
+- [Decision 3.0 d3-mini (multimodal)](./vllm-sr/d3-mini/)
 - [Vela 2.0 0.3B on CPU](./vllm-sr/Vela-2.0-0.3B-cpu/)
 - [Decision 2.0 Kai 0.6B on CPU](./vllm-sr/Decision-2.0-Kai-0.6B-cpu/)
 - [Decision 2.0 Sol 2B](./vllm-sr/Decision-2.0-Sol-2B/)
