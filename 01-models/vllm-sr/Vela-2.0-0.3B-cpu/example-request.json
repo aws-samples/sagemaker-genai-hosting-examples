@@ -1,0 +1,50 @@
+{
+  "state": {
+    "request": "Hi, I'm Tom Baker (tom.baker@example.com). What is the maximum daily dose of paracetamol for an adult?",
+    "source": "For adults, the maximum dose of paracetamol is 4 grams in 24 hours, taken as 500 mg to 1 g every 4 to 6 hours.",
+    "answer": "Adults can take up to 6 grams of paracetamol in 24 hours, in doses of 500 mg to 1 g every 4 to 6 hours."
+  },
+  "questions": {
+    "pii": {
+      "type": "span",
+      "instructions": "Which spans are personal information?",
+      "over": "request",
+      "criteria": {
+        "AGE": "a person's age",
+        "CREDIT_CARD": "a payment card number",
+        "DATE_TIME": "a date, time or date of birth",
+        "DOMAIN_NAME": "an internet domain name or website address",
+        "EMAIL_ADDRESS": "an e-mail address",
+        "GPE": "a country, city, state or other geopolitical place",
+        "IBAN_CODE": "an international bank account number (IBAN)",
+        "IP_ADDRESS": "an IPv4 or IPv6 address",
+        "NRP": "a nationality, religious or political group",
+        "ORGANIZATION": "the name of a company, institution or other organisation",
+        "PERSON": "a person's name",
+        "PHONE_NUMBER": "a telephone number",
+        "STREET_ADDRESS": "a street address or postal address",
+        "TITLE": "a personal or professional title such as Dr. or Mrs.",
+        "US_DRIVER_LICENSE": "a US driver's licence number",
+        "US_SSN": "a US social security number",
+        "ZIP_CODE": "a postal or ZIP code"
+      }
+    },
+    "halu": {
+      "type": "span",
+      "instructions": "Which spans of the answer are not supported by the context?",
+      "criteria": {
+        "unsupported": "a claim not supported by the context"
+      }
+    },
+    "domain": {
+      "type": "choice",
+      "instructions": "Which subject area is this request about?",
+      "over": "request",
+      "criteria": {
+        "health": "medicine, clinical practice, nutrition, ageing or sexual health",
+        "math": "arithmetic, algebra, geometry, statistics or other mathematics",
+        "other": "a subject that fits none of the listed areas"
+      }
+    }
+  }
+}

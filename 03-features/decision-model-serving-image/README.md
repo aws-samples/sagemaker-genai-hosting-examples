@@ -1,9 +1,10 @@
 # Decision-model serving image on the PyTorch 2.14 DLC
 
 A small Amazon SageMaker AI hosting image for the decision-model samples in this repository, such as
-[Strands Decider 2B](../../01-models/StrandsAgents/strands-decider-2B/). It's built on the maintained
+[Strands Decider 2B](../../01-models/StrandsAgents/strands-decider-2B/) and the CPU-hosted
+[Decision 2.0 Kai 0.6B](../../01-models/vllm-sr/Decision-2.0-Kai-0.6B-cpu/). It's built on the maintained
 [AWS PyTorch 2.14 SageMaker DLC](https://github.com/aws/deep-learning-containers/blob/main/docs/pytorch/index.md)
-(`pytorch:2.14-cu133-amzn2023-sagemaker`, supported until 28 September 2027).
+(`pytorch:2.14-cu133-amzn2023-sagemaker` by default, or the CPU DLC; both supported until 28 September 2027).
 
 ## Why an image
 
@@ -33,14 +34,34 @@ The default AMIs for `ml.g5` and `ml.g4dn` have driver 470 (CUDA 11.4). On both 
 started and answered (A10G and T4). The default `ml.g6` AMI worked through the DLC's CUDA forward compatibility,
 but set the AMI explicitly anyway.
 
+## CPU variant
+
+The same Dockerfile builds a CPU image from the PyTorch 2.14 **CPU** SageMaker DLC
+(`pytorch:2.14-cpu-amzn2023-sagemaker`, also supported until 28 September 2027), which the
+[Decision 2.0 Kai 0.6B](../../01-models/vllm-sr/Decision-2.0-Kai-0.6B-cpu/) and
+[Vela 2.0 0.3B](../../01-models/vllm-sr/Vela-2.0-0.3B-cpu/) CPU samples use on `ml.c7i` instances. Pass the base through the `BASE_IMAGE` build argument; `build_image.py`
+exposes it and tags the variant separately in the shared repository:
+
+```bash
+python build_image.py --region us-east-1 --bucket <artifact-bucket> \
+  --codebuild-role-arn arn:aws:iam::<account>:role/<codebuild-role> \
+  --base-image public.ecr.aws/deep-learning-containers/pytorch:2.14-cpu-amzn2023-sagemaker \
+  --tag-prefix pt214-cpu
+```
+
+The CPU DLC has the same `/usr/local/bin/entrypoint.sh`, which only applies the CUDA compatibility
+check when a CUDA runtime is present, so `serve` starts unchanged. CPU endpoints do not need
+`InferenceAmiVersion`. The CPU image is smaller than the CUDA one because the base carries no
+CUDA libraries, and the shared Python pins are the same.
+
 ## Files
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | `FROM` the PyTorch 2.14 SageMaker DLC; adds the shared libraries and `serve` |
+| `Dockerfile` | `FROM` the PyTorch 2.14 SageMaker DLC (`BASE_IMAGE` build argument; CUDA by default); adds the shared libraries and `serve` |
 | `requirements.txt` | Pinned Hugging Face libraries, `sagemaker-inference`, and the server; PyTorch comes from the base |
 | `serve`, `serve.py` | The hosting entrypoint and server |
-| `buildspec.yml` | AWS CodeBuild build and push |
+| `buildspec.yml` | AWS CodeBuild build and push; forwards `BASE_IMAGE` when set |
 | `build_image.py` | Uploads the build context, creates or updates the CodeBuild project, waits, and returns the digest-pinned ECR image URI |
 
 ## Build
