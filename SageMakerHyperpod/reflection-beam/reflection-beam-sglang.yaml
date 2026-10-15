@@ -1,0 +1,88 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: InferenceEndpointConfig
+metadata:
+  name: reflection-beam-sglang
+  namespace: "${BEAM_NAMESPACE}"
+spec:
+  modelName: Reflection-Beam-SGLang
+  instanceType: "${SGLANG_INSTANCE_TYPE}"
+  invocationEndpoint: v1/chat/completions
+  replicas: 1
+  loadBalancer:
+    healthCheckPath: /health
+    routingAlgorithm: least_outstanding_requests
+  modelSourceConfig:
+    modelSourceType: huggingface
+    prefetchEnabled: false
+    huggingFaceModel:
+      modelId: "${SGLANG_MODEL_ID}"
+      commitSHA: "${SGLANG_MODEL_COMMIT_SHA}"
+  worker:
+    image: "${SGLANG_IMAGE}"
+    command:
+      - python
+      - -m
+      - sglang.launch_server
+    args:
+      - --model-path
+      - /opt/ml/model
+      - --served-model-name
+      - reflection-beam
+      - --tp
+      - "${SGLANG_TENSOR_PARALLEL_SIZE}"
+      - --attention-backend
+      - "${SGLANG_ATTENTION_BACKEND}"
+      - --page-size
+      - "${SGLANG_PAGE_SIZE}"
+      - --context-length
+      - "${SGLANG_CONTEXT_LENGTH}"
+      - --mem-fraction-static
+      - "${SGLANG_MEM_FRACTION_STATIC}"
+      - --enable-unified-memory
+      - --speculative-algorithm
+      - DFLASH
+      - --speculative-draft-model-path
+      - "${SGLANG_DRAFT_MODEL_ID}"
+      - --speculative-dflash-block-size
+      - "${SGLANG_DFLASH_BLOCK_SIZE}"
+      - --reasoning-parser
+      - "${SGLANG_REASONING_PARSER}"
+      - --tool-call-parser
+      - "${SGLANG_TOOL_CALL_PARSER}"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30000"
+    modelInvocationPort:
+      containerPort: 30000
+      name: http
+    modelVolumeMount:
+      mountPath: /opt/ml/model
+      name: model-weights
+    resources:
+      limits:
+        nvidia.com/gpu: "${SGLANG_GPU_COUNT}"
+      requests:
+        nvidia.com/gpu: "${SGLANG_GPU_COUNT}"
+    probes:
+      startupProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 360
+        periodSeconds: 10
+        timeoutSeconds: 5
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 12
+        periodSeconds: 10
+        timeoutSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: http
+        failureThreshold: 12
+        periodSeconds: 30
+        timeoutSeconds: 5

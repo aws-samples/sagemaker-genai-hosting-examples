@@ -1,0 +1,16 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: JumpStartModel
+metadata:
+  name: reflection-beam-jumpstart
+  namespace: "${BEAM_NAMESPACE}"
+spec:
+  sageMakerEndpoint:
+    name: "${JUMPSTART_ENDPOINT_NAME}"
+  model:
+    modelHubName: SageMakerPublicHub
+    modelId: "${JUMPSTART_MODEL_ID}"
+    modelVersion: "${JUMPSTART_MODEL_VERSION}"
+  server:
+    instanceType: "${JUMPSTART_INSTANCE_TYPE}"
+  metrics:
+    enabled: true
