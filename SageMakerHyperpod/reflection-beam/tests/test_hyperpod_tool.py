@@ -59,9 +59,23 @@ class ConfigTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             hyperpod_tool.ToolError,
-            "SGLANG_IMAGE.*SGLANG_MODEL_COMMIT_SHA",
+            "SGLANG_IMAGE.*SGLANG_REASONING_PARSER",
         ):
             hyperpod_tool.render_manifest("sglang", values)
+
+    def test_release_config_pins_final_custom_runtime_checkpoint(self) -> None:
+        values = hyperpod_tool.parse_env_file(
+            hyperpod_tool.SAMPLE_ROOT / "config/release.env.example"
+        )
+        expected_model_id = "reflection/Beam-1.0-501B-A23B-DFlash2"
+        expected_model_commit = "8d26c952ec6a82a9a18825d6126c9f6948149ad9"
+        for runtime in ("SGLANG", "VLLM"):
+            with self.subTest(runtime=runtime):
+                self.assertEqual(values[f"{runtime}_MODEL_ID"], expected_model_id)
+                self.assertEqual(
+                    values[f"{runtime}_MODEL_COMMIT_SHA"],
+                    expected_model_commit,
+                )
 
     def test_environment_overrides_file_without_executing_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

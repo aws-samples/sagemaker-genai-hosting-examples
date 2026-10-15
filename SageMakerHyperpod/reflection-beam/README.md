@@ -7,10 +7,12 @@ SageMaker HyperPod Inference:
 - SGLang with `InferenceEndpointConfig`.
 - vLLM with `InferenceEndpointConfig`.
 
-The sample includes the public JumpStart model IDs. Supply supported image
-digests, parser names, checkpoint revisions, and topology values from the Beam
-model card and the selected runtime release. Do not add credentials, account
-resources, or model request bodies to the committed configuration.
+The sample includes the public JumpStart model IDs and pins the custom-runtime
+paths to the final Beam DFlash2 checkpoint revision. Supply public image
+digests built from the listed SGLang and vLLM release commits, plus the parser
+names and topology values documented for those releases. Do not add
+credentials, account resources, or model request bodies to the committed
+configuration.
 
 ## Files
 
@@ -59,6 +61,22 @@ cp config/release.env.example config/release.env
 Set the deployment values for the path you will use. Keep runtime-specific
 values together; a checkpoint, image, parser, quantization mode, and parallel
 layout must be compatible with each other.
+
+The SGLang and vLLM paths use
+`reflection/Beam-1.0-501B-A23B-DFlash2` at commit
+`8d26c952ec6a82a9a18825d6126c9f6948149ad9`. This revision includes the updated
+chat template. Pull it again if you previously cached an older revision.
+
+Use these runtime support commits:
+
+| Runtime | Release commit |
+|---|---|
+| SGLang | [`8f94384cb5caeafc57dfa23c52bcfcedf6b88a41`](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41) |
+| vLLM | [`8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2`](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2) |
+
+The source commit is not a deployable image reference. Set `SGLANG_IMAGE` and
+`VLLM_IMAGE` to public images built from these commits and pin each image by
+digest.
 
 For the JumpStart path, `config/release.env.example` defaults to the NVFP4
 checkpoint and lists the BF16 and FP8 model IDs as alternatives. Select the
@@ -268,5 +286,6 @@ The tests do not require a cluster, AWS credentials, or the `openai` package.
 - [Deploy JumpStart models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy.html)
 - [Deploy custom models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy-ftm.html)
 - [Reflection Beam model collection](https://huggingface.co/collections/reflection/beam)
-- [SGLang releases](https://github.com/sgl-project/sglang/releases)
-- [vLLM releases](https://github.com/vllm-project/vllm/releases)
+- [Beam DFlash2 checkpoint](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2/tree/8d26c952ec6a82a9a18825d6126c9f6948149ad9)
+- [SGLang Beam release commit](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41)
+- [vLLM Beam release commit](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2)
