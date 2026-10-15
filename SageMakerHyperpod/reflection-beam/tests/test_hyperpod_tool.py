@@ -84,10 +84,15 @@ class ConfigTests(unittest.TestCase):
             values["SGLANG_MODEL_ID"],
             values["SGLANG_DRAFT_MODEL_ID"],
         )
-        self.assertTrue(
-            hyperpod_tool.is_placeholder(values["SGLANG_MODEL_COMMIT_SHA"])
+        self.assertEqual(
+            values["SGLANG_MODEL_COMMIT_SHA"],
+            "1bee7db4502ea1b7d0bd8574855e55334d87554f",
         )
-        self.assertTrue(hyperpod_tool.is_placeholder(values["VLLM_MODEL_ID"]))
+        self.assertEqual(
+            values["VLLM_MODEL_ID"],
+            "reflection/Beam-1.0-501B-A23B-NVFP4",
+        )
+        self.assertFalse(hyperpod_tool.is_placeholder(values["VLLM_IMAGE"]))
 
     def test_environment_overrides_file_without_executing_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
