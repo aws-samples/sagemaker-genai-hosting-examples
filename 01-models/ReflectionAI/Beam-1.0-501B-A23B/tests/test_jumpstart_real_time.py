@@ -129,6 +129,9 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         model = jumpstart_model_class.return_value
         model.deploy.return_value = predictor
         session = Mock(name="sagemaker_session")
+        session.sagemaker_client.describe_endpoint.side_effect = (
+            self.MissingResourceError('Could not find endpoint "beam-smoke-test".')
+        )
         predictor.sagemaker_session = session
         predictor.endpoint_name = "beam-smoke-test"
 
@@ -159,6 +162,56 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             WaiterConfig={"Delay": 15, "MaxAttempts": 60},
         )
         self.assertIs(result, predictor)
+
+    def test_deploy_refuses_to_replace_or_delete_an_existing_endpoint(self):
+        sample, jumpstart_model_class = _load_sample_module()
+        session = Mock(name="sagemaker_session")
+        session.sagemaker_client.describe_endpoint.return_value = {
+            "EndpointName": "beam-smoke-test",
+            "EndpointConfigName": "existing-config",
+            "EndpointStatus": "InService",
+        }
+
+        with (
+            patch.object(sample, "cleanup_endpoint") as cleanup,
+            self.assertRaisesRegex(ValueError, "already exists.*not modified"),
+        ):
+            sample.deploy_endpoint(
+                sagemaker_session=session,
+                endpoint_name="beam-smoke-test",
+                timeout_seconds=900,
+                variant="fp8",
+            )
+
+        jumpstart_model_class.return_value.deploy.assert_not_called()
+        cleanup.assert_not_called()
+        session.sagemaker_client.delete_endpoint.assert_not_called()
+        session.sagemaker_client.delete_endpoint_config.assert_not_called()
+
+    def test_deploy_failure_before_predictor_never_runs_name_based_cleanup(self):
+        sample, jumpstart_model_class = _load_sample_module()
+        session = Mock(name="sagemaker_session")
+        session.sagemaker_client.describe_endpoint.side_effect = (
+            self.MissingResourceError('Could not find endpoint "beam-smoke-test".')
+        )
+        jumpstart_model_class.return_value.deploy.side_effect = RuntimeError(
+            "endpoint already existing"
+        )
+
+        with (
+            patch.object(sample, "cleanup_endpoint") as cleanup,
+            self.assertRaisesRegex(RuntimeError, "already existing"),
+        ):
+            sample.deploy_endpoint(
+                sagemaker_session=session,
+                endpoint_name="beam-smoke-test",
+                timeout_seconds=900,
+                variant="fp8",
+            )
+
+        cleanup.assert_not_called()
+        session.sagemaker_client.delete_endpoint.assert_not_called()
+        session.sagemaker_client.delete_endpoint_config.assert_not_called()
 
     def test_deploy_generates_endpoint_name_before_creating_resources(self):
         sample, jumpstart_model_class = _load_sample_module()
@@ -210,6 +263,9 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         predictor.endpoint_name = "beam-smoke-test"
         model = jumpstart_model_class.return_value
         model.deploy.return_value = predictor
+        model.sagemaker_session.sagemaker_client.describe_endpoint.side_effect = (
+            self.MissingResourceError('Could not find endpoint "beam-smoke-test".')
+        )
         waiter = predictor.sagemaker_session.sagemaker_client.get_waiter.return_value
         waiter.wait.side_effect = KeyboardInterrupt()
 
@@ -224,8 +280,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
 
         cleanup.assert_called_once_with(
             predictor,
-            endpoint_name="beam-smoke-test",
-            model=model,
             timeout_seconds=900,
         )
 
@@ -235,6 +289,9 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         predictor.endpoint_name = "beam-smoke-test"
         model = jumpstart_model_class.return_value
         model.deploy.return_value = predictor
+        model.sagemaker_session.sagemaker_client.describe_endpoint.side_effect = (
+            self.MissingResourceError('Could not find endpoint "beam-smoke-test".')
+        )
         waiter = predictor.sagemaker_session.sagemaker_client.get_waiter.return_value
         waiter.wait.side_effect = TimeoutError("endpoint creation timed out")
 
@@ -441,25 +498,10 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         client.delete_endpoint_config.assert_not_called()
         predictor._reflection_beam_model.delete_model.assert_not_called()
 
-    def test_cleanup_removes_partial_resources_when_endpoint_is_absent(self):
-        sample, jumpstart_model_class = _load_sample_module()
-        model = jumpstart_model_class.return_value
-        client = model.sagemaker_session.sagemaker_client
-        client.describe_endpoint.side_effect = self.MissingResourceError(
-            'Could not find endpoint "beam-smoke-test".'
-        )
+    def test_cleanup_without_owned_predictor_is_a_noop(self):
+        sample, _ = _load_sample_module()
 
-        sample.cleanup_endpoint(
-            None,
-            endpoint_name="beam-smoke-test",
-            model=model,
-        )
-
-        client.delete_endpoint.assert_not_called()
-        client.delete_endpoint_config.assert_called_once_with(
-            EndpointConfigName="beam-smoke-test"
-        )
-        model.delete_model.assert_called_once_with()
+        sample.cleanup_endpoint(None)
 
     def test_help_works_without_installed_sdk(self):
         sample, _ = _load_sample_module()

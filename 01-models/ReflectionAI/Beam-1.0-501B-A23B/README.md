@@ -87,6 +87,11 @@ cannot complete, it reports the endpoint name and exits with an error so you can
 inspect the endpoint in SageMaker. Use the Python functions directly when you
 need to keep an endpoint running.
 
+The CLI generates a unique endpoint name unless you supply `--endpoint-name`.
+If the supplied name already exists, deployment stops before creating or
+deleting resources. Automatic cleanup runs only after the deployment call
+returns a predictor owned by the current run.
+
 ## Use the Python functions
 
 | Function | Behavior |
@@ -135,9 +140,9 @@ documentation before release.
 Cleanup requests endpoint deletion and waits for it to complete before deleting
 the endpoint configuration and SageMaker model. This order prevents cleanup
 from removing resources that an endpoint still uses. If deployment fails before
-returning a predictor, the sample uses the endpoint name chosen before
-deployment to inspect and remove partial resources. Cleanup failures are
-reported instead of suppressed.
+returning a predictor, the sample leaves existing and partial resources
+untouched because it cannot prove that the current run created them. Cleanup
+failures are reported instead of suppressed.
 
 ## Run the tests
 

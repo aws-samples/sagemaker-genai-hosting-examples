@@ -67,6 +67,22 @@ def _is_missing_resource(error: Exception, resource_name: str) -> bool:
     )
 
 
+def _require_available_endpoint_name(session: Any, endpoint_name: str) -> None:
+    """Refuse to deploy over an endpoint that this run does not own."""
+    try:
+        session.sagemaker_client.describe_endpoint(EndpointName=endpoint_name)
+    except Exception as error:
+        if _is_missing_resource(error, "endpoint"):
+            return
+        raise RuntimeError(
+            f"Could not verify whether endpoint {endpoint_name} already exists."
+        ) from error
+    raise ValueError(
+        f"Endpoint {endpoint_name} already exists. Choose another name; "
+        "the existing endpoint was not modified."
+    )
+
+
 def deploy_endpoint(
     *,
     sagemaker_session: Any = None,
@@ -88,6 +104,12 @@ def deploy_endpoint(
         model_id=model_id,
         sagemaker_session=sagemaker_session,
     )
+    if endpoint_name is not None:
+        _require_available_endpoint_name(
+            sagemaker_session or model.sagemaker_session,
+            resolved_endpoint_name,
+        )
+
     predictor = None
     try:
         predictor = model.deploy(
@@ -109,11 +131,13 @@ def deploy_endpoint(
         )
         return predictor
     except BaseException:
+        if predictor is None:
+            # Without a returned predictor, this run cannot prove it created the
+            # endpoint. Never delete resources solely by the requested name.
+            raise
         try:
             cleanup_endpoint(
                 predictor,
-                endpoint_name=resolved_endpoint_name,
-                model=model,
                 timeout_seconds=timeout,
             )
         except Exception as cleanup_error:
@@ -194,21 +218,16 @@ def smoke_test(predictor: Any) -> str:
 def cleanup_endpoint(
     predictor: Any | None,
     *,
-    endpoint_name: str | None = None,
-    model: Any = None,
     timeout_seconds: int = 900,
 ) -> None:
-    """Delete the endpoint before its endpoint configuration and model."""
-    if predictor is None and model is None:
+    """Delete resources owned by a predictor returned from this deployment."""
+    if predictor is None:
         return
 
     timeout = _require_positive_integer(timeout_seconds, "timeout_seconds")
-    if predictor is not None:
-        endpoint_name = predictor.endpoint_name
-        model = model or getattr(predictor, "_reflection_beam_model", None)
-        session = predictor.sagemaker_session
-    else:
-        session = getattr(model, "sagemaker_session", None)
+    endpoint_name = predictor.endpoint_name
+    model = getattr(predictor, "_reflection_beam_model", None)
+    session = predictor.sagemaker_session
 
     if session is None:
         raise RuntimeError("Cleanup requires a SageMaker session.")
