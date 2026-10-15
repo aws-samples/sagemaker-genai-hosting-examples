@@ -20,6 +20,8 @@ If you are contributing, please add a link to your model below:
 - [Kimi-K2.7-Code](./01-models/Kimi/Kimi-K2.7-Code/)
 - [Strands Decider 2B](./01-models/StrandsAgents/strands-decider-2B/)
 - [Decision 2.0 Sol 2B](./01-models/vllm-sr/Decision-2.0-Sol-2B/)
+- [Decision 2.0 Kai 0.6B on CPU](./01-models/vllm-sr/Decision-2.0-Kai-0.6B-cpu/)
+- [Vela 2.0 0.3B on CPU](./01-models/vllm-sr/Vela-2.0-0.3B-cpu/)
 
 ## Additional Resources
 
