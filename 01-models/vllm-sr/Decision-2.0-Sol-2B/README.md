@@ -5,7 +5,8 @@ to a real-time endpoint on one `ml.g6.xlarge`, falling back to `ml.g5.xlarge` wh
 capacity is unavailable, using its published Transformers runtime and native `system_one`
 API. It runs on the maintained AWS PyTorch 2.14 SageMaker DLC through the shared
 [decision-model serving image](../../../03-features/decision-model-serving-image/), on
-the SageMaker inference AMI with NVIDIA driver 580 that the image's CUDA 13 needs.
+the SageMaker inference AMI with NVIDIA driver 580, which `ml.g5` and `ml.g4dn` require
+for the image's CUDA 13 and the notebook sets for every type.
 
 The model returns Choice, Yes/No (`noul`), and Score judgments over supplied
 state without generating text. Its checkpoint, head, and bundled inference code
@@ -37,8 +38,8 @@ Region, verify instance availability. The notebook accepts `SAGEMAKER_INFERENCE_
 `SAGEMAKER_EXECUTION_ROLE_ARN`, `SAGEMAKER_ARTIFACT_BUCKET`, `CODEBUILD_ROLE_ARN`, and
 `SAGEMAKER_INSTANCE_TYPES` (priority order, default `ml.g6.xlarge,ml.g5.xlarge`; with more
 than one, the endpoint uses a
-[capacity-aware instance pool](../../../03-features/capacity-aware-instance-pool/),
-available in 16 commercial Regions) overrides. `SAGEMAKER_INFERENCE_AMI_VERSION` sets the
+[capacity-aware instance pool](../../../03-features/capacity-aware-instance-pool/), so
+check that it is available in your Region) overrides. `SAGEMAKER_INFERENCE_AMI_VERSION` sets the
 inference AMI (default `al2023-ami-sagemaker-inference-gpu-4-1`). Do not use the default
 AMIs of `ml.g5` and `ml.g4dn` (NVIDIA driver 470): they cannot start the CUDA 13 image.
 
@@ -60,7 +61,7 @@ names. It preserves the existing IAM role and shared artifact bucket. It uses
 |---|---|
 | `deploy_decision_sol_2b_sagemaker.ipynb` | Setup, package, deploy, invoke, validate, and clean up |
 | `inference.py` | Native `AutoModel` / `system_one` adapter for SageMaker |
-| `requirements.txt` | Extra Python packages for the sample; empty by default because the serving image provides the libraries |
+| `requirements.txt` | Extra Python packages for the sample; no packages by default because the serving image provides the libraries |
 | `example-request.json` | Grounding, next-action, and readiness questions |
 
 ## Serving configuration
@@ -78,7 +79,7 @@ names. It preserves the existing IAM role and shared artifact bucket. It uses
 | Worker | One process; native inference serialized |
 | Precision | Native BF16-resident eligible Linear weights; FP32 head |
 | Startup timeout | 1,800 seconds for the SageMaker container health check |
-| Request timeout | 60 seconds (`SAGEMAKER_MODEL_SERVER_TIMEOUT`); the server answers 504 |
+| Request timeout | 55 seconds (`SAGEMAKER_MODEL_SERVER_TIMEOUT`); the server answers 504, inside the 60 seconds SageMaker AI allows a container to respond ([what it does and does not bound](../../../03-features/decision-model-serving-image/README.md#per-request-timeout)) |
 
 The published loader first constructs FP32 weights on the CPU and then reduces
 eligible Linear weights to BF16 before moving to the GPU. The FP32 parameter
@@ -130,23 +131,27 @@ memory result.
 
 ### Serving image results
 
-The same notebook on the serving image (PyTorch 2.14.0, CUDA 13.0, Transformers 5.17.0),
-on `ml.g6.xlarge` in `eu-west-1` on October 9, 2026, passed every check, including
+This notebook on the serving image (PyTorch 2.14.0, CUDA 13.0, Transformers 5.17.0),
+on `ml.g6.xlarge` in `eu-west-1` on October 15, 2026, passed every check, including
 model HTTP 422 for oversized state, and cleaned up. Medians of three requests:
 
 | Questions | Server latency (ms) | SDK round trip (ms) | GPU peak allocated (GiB) |
 |---|---:|---:|---:|
-| 1 | 55.05 | 76.80 | 4.49 |
-| 8 | 89.66 | 110.45 | 4.62 |
-| 32 | 448.98 | 473.23 | 5.06 |
-| 64 | 1,052.08 | 1,077.92 | 5.66 |
+| 1 | 52.36 | 89.42 | 4.49 |
+| 8 | 89.14 | 125.02 | 4.62 |
+| 32 | 450.89 | 491.75 | 5.06 |
+| 64 | 1,056.43 | 1,096.90 | 5.66 |
 
-Worker lifetime peak RSS was 9.21 GiB. SDK round trips depend on where the client runs;
+Worker lifetime peak RSS was 9.22 GiB. SDK round trips depend on where the client runs;
 this one ran on a laptop in London against `eu-west-1`.
 
 On `ml.g5.xlarge` (A10G) in `us-east-1` the notebook also passed, with server medians of
-63.79, 104.37, 380.49 and 718.32 ms for 1, 8, 32 and 64 questions, the same GPU peak
-allocation, and a worker peak RSS of 8.93 GiB.
+64.36, 103.94, 377.94 and 718.80 ms for 1, 8, 32 and 64 questions, the same GPU peak
+allocation, and a worker peak RSS of 8.91 GiB.
+
+An earlier run of the same sample on October 9, before the per-request timeout and the
+GPU and version assertions were added, gave server medians within 5 ms of these on both
+instance types, with identical GPU peak allocation.
 
 ## Runtime and performance scope
 
@@ -179,9 +184,9 @@ NVIDIA T4 (`ml.g4dn`) has no hardware support for; that combination is untested 
 
 PyTorch 2.14 is built for CUDA 13, which ships with NVIDIA driver 580. The endpoint sets
 `InferenceAmiVersion` to `al2023-ami-sagemaker-inference-gpu-4-1`, which ships that
-driver. The default AMI of `ml.g5` and `ml.g4dn` (driver 470) cannot start the image: the
-container failed with `CannotStartContainerError` on both. The image is about 10 GB compressed because the base
-DLC carries the PyTorch training stack. This is an evaluation sample: review the
+driver. On the default AMIs tested for `ml.g5` and `ml.g4dn` (driver 470) the container
+failed with `CannotStartContainerError`, so set the AMI explicitly. The image is about
+10 GB compressed because the base DLC carries the PyTorch training stack. This is an evaluation sample: review the
 dependencies and the image before production use.
 
 ## Cleanup

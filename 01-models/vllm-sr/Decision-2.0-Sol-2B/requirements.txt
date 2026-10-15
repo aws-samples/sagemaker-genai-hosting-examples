@@ -1,6 +1,7 @@
-# Nothing to install at startup. The shared decision-model serving image provides torch
-# 2.14 (CUDA 13) and numpy from the PyTorch 2.14 SageMaker DLC, and pins transformers
-# 5.17.0, huggingface_hub 1.33.0, safetensors, accelerate and sagemaker-inference itself.
+# Nothing to install at startup. The shared decision-model serving image takes torch 2.14
+# (CUDA 13 in its GPU build) and numpy from the PyTorch 2.14 SageMaker DLC, pins
+# transformers 5.17.0 and huggingface_hub 1.33.0, and bounds safetensors, accelerate, peft
+# and sagemaker-inference itself to version ranges.
 # The ranges this file used to pin (numpy>=1.24,<3 and huggingface_hub>=1.5,<2) are
 # asserted against the image in the notebook's diagnostics cell. The Decision 2.0 runtime
 # ships inside the pinned model repository and is loaded as the model's remote code.
