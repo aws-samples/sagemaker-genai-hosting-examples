@@ -27,9 +27,14 @@ def configured_values() -> dict[str, str]:
         "SGLANG_INSTANCE_TYPE": "ml.example.8xlarge",
         "SGLANG_GPU_COUNT": "8",
         "SGLANG_TENSOR_PARALLEL_SIZE": "8",
-        "SGLANG_EXPERT_PARALLEL_SIZE": "8",
+        "SGLANG_ATTENTION_BACKEND": "trtllm_mha",
+        "SGLANG_PAGE_SIZE": "64",
+        "SGLANG_CONTEXT_LENGTH": "1048576",
+        "SGLANG_MEM_FRACTION_STATIC": "0.85",
+        "SGLANG_DFLASH_BLOCK_SIZE": "8",
         "SGLANG_MODEL_ID": "reflection/example-beam",
         "SGLANG_MODEL_COMMIT_SHA": FULL_COMMIT,
+        "SGLANG_DRAFT_MODEL_ID": "reflection/example-beam-dflash2",
         "SGLANG_IMAGE": PUBLIC_DIGEST,
         "SGLANG_REASONING_PARSER": "documented-parser",
         "SGLANG_TOOL_CALL_PARSER": "documented-tool-parser",
@@ -59,23 +64,30 @@ class ConfigTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             hyperpod_tool.ToolError,
-            "SGLANG_IMAGE.*SGLANG_REASONING_PARSER",
+            "missing configuration for sglang",
         ):
             hyperpod_tool.render_manifest("sglang", values)
 
-    def test_release_config_pins_final_custom_runtime_checkpoint(self) -> None:
+    def test_release_config_separates_sglang_target_and_drafter(self) -> None:
         values = hyperpod_tool.parse_env_file(
             hyperpod_tool.SAMPLE_ROOT / "config/release.env.example"
         )
-        expected_model_id = "reflection/Beam-1.0-501B-A23B-DFlash2"
-        expected_model_commit = "8d26c952ec6a82a9a18825d6126c9f6948149ad9"
-        for runtime in ("SGLANG", "VLLM"):
-            with self.subTest(runtime=runtime):
-                self.assertEqual(values[f"{runtime}_MODEL_ID"], expected_model_id)
-                self.assertEqual(
-                    values[f"{runtime}_MODEL_COMMIT_SHA"],
-                    expected_model_commit,
-                )
+        self.assertEqual(
+            values["SGLANG_MODEL_ID"],
+            "reflection/Beam-1.0-501B-A23B-NVFP4",
+        )
+        self.assertEqual(
+            values["SGLANG_DRAFT_MODEL_ID"],
+            "reflection/Beam-1.0-501B-A23B-DFlash2",
+        )
+        self.assertNotEqual(
+            values["SGLANG_MODEL_ID"],
+            values["SGLANG_DRAFT_MODEL_ID"],
+        )
+        self.assertTrue(
+            hyperpod_tool.is_placeholder(values["SGLANG_MODEL_COMMIT_SHA"])
+        )
+        self.assertTrue(hyperpod_tool.is_placeholder(values["VLLM_MODEL_ID"]))
 
     def test_environment_overrides_file_without_executing_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -111,6 +123,14 @@ class ConfigTests(unittest.TestCase):
                 self.assertNotIn("REPLACE_WITH_", rendered)
                 self.assertIn('namespace: "default"', rendered)
 
+    def test_custom_runtime_manifests_do_not_enable_expert_parallelism(self) -> None:
+        values = configured_values()
+        for runtime in ("sglang", "vllm"):
+            with self.subTest(runtime=runtime):
+                rendered = hyperpod_tool.render_manifest(runtime, values)
+                self.assertNotIn("--ep-size", rendered)
+                self.assertNotIn("--enable-expert-parallel", rendered)
+
     def test_rejects_unpinned_image_and_short_commit(self) -> None:
         values = configured_values()
         values["VLLM_IMAGE"] = "ghcr.io/example/runtime:latest"
@@ -121,6 +141,17 @@ class ConfigTests(unittest.TestCase):
         values["SGLANG_MODEL_COMMIT_SHA"] = "abc123"
         with self.assertRaisesRegex(hyperpod_tool.ToolError, "40-character"):
             hyperpod_tool.render_manifest("sglang", values)
+
+    def test_rejects_invalid_sglang_memory_fraction(self) -> None:
+        for value in ("0", "1.1", "not-a-number"):
+            values = configured_values()
+            values["SGLANG_MEM_FRACTION_STATIC"] = value
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    hyperpod_tool.ToolError,
+                    "SGLANG_MEM_FRACTION_STATIC",
+                ):
+                    hyperpod_tool.render_manifest("sglang", values)
 
     def test_rejects_overlong_endpoint_and_multiline_environment_value(self) -> None:
         values = configured_values()
@@ -258,9 +289,44 @@ class SafetyTests(unittest.TestCase):
             prefix = runtime.upper()
             for suffix in release_keys:
                 self.assertIn(f"${{{prefix}_{suffix}}}", content)
+            if runtime == "sglang":
+                self.assertIn("${SGLANG_DRAFT_MODEL_ID}", content)
 
 
 class MainTests(unittest.TestCase):
+    def test_custom_invocation_accepts_recommended_sampling_settings(self) -> None:
+        parser = hyperpod_tool.build_parser()
+        args = parser.parse_args(
+            [
+                "invoke",
+                "vllm",
+                "--base-url",
+                "http://127.0.0.1:8000/v1",
+                "--temperature",
+                "1.0",
+                "--top-p",
+                "0.7",
+            ]
+        )
+        hyperpod_tool.validate_invocation_args(args)
+        self.assertEqual(args.temperature, 1.0)
+        self.assertEqual(args.top_p, 0.7)
+
+    def test_custom_invocation_rejects_invalid_top_p(self) -> None:
+        parser = hyperpod_tool.build_parser()
+        args = parser.parse_args(
+            [
+                "invoke",
+                "vllm",
+                "--base-url",
+                "http://127.0.0.1:8000/v1",
+                "--top-p",
+                "1.1",
+            ]
+        )
+        with self.assertRaisesRegex(hyperpod_tool.ToolError, "--top-p"):
+            hyperpod_tool.validate_invocation_args(args)
+
     def test_validate_reports_missing_values_cleanly(self) -> None:
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):

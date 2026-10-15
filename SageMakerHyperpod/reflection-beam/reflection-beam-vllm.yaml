@@ -26,7 +26,6 @@ spec:
       - reflection-beam
       - --tensor-parallel-size
       - "${VLLM_TENSOR_PARALLEL_SIZE}"
-      - --enable-expert-parallel
       - --enable-auto-tool-choice
       - --reasoning-parser
       - "${VLLM_REASONING_PARSER}"

@@ -93,15 +93,23 @@ class ArgumentTests(unittest.TestCase):
                 "1",
                 "--temperature",
                 "2",
+                "--top-p",
+                "0.7",
             ]
         )
         self.assertEqual(args.max_tokens, 1)
         self.assertEqual(args.timeout_seconds, 1)
+        self.assertEqual(args.top_p, 0.7)
 
     def test_non_positive_max_tokens_is_rejected(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 beam_client.parse_args(["chat", "--max-tokens", "0"])
+
+    def test_invalid_top_p_is_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                beam_client.parse_args(["chat", "--top-p", "1.1"])
 
 
 if __name__ == "__main__":

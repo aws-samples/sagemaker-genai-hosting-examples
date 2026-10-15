@@ -74,6 +74,7 @@ def chat(args: argparse.Namespace) -> int:
         messages=[{"role": "user", "content": args.prompt}],
         max_tokens=args.max_tokens,
         temperature=args.temperature,
+        top_p=args.top_p,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -297,10 +298,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--target", default="pagination.py")
     parser.add_argument("--max-tokens", type=positive_int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--timeout-seconds", type=positive_int, default=300)
     args = parser.parse_args(argv)
     if not 0.0 <= args.temperature <= 2.0:
         parser.error("--temperature must be between 0 and 2")
+    if not 0.0 <= args.top_p <= 1.0:
+        parser.error("--top-p must be between 0 and 1")
     return args
 
 

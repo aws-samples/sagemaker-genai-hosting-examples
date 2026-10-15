@@ -20,17 +20,31 @@ spec:
   worker:
     image: "${SGLANG_IMAGE}"
     command:
-      - sglang
-      - serve
+      - python
+      - -m
+      - sglang.launch_server
     args:
       - --model-path
       - /opt/ml/model
       - --served-model-name
       - reflection-beam
-      - --tp-size
+      - --tp
       - "${SGLANG_TENSOR_PARALLEL_SIZE}"
-      - --ep-size
-      - "${SGLANG_EXPERT_PARALLEL_SIZE}"
+      - --attention-backend
+      - "${SGLANG_ATTENTION_BACKEND}"
+      - --page-size
+      - "${SGLANG_PAGE_SIZE}"
+      - --context-length
+      - "${SGLANG_CONTEXT_LENGTH}"
+      - --mem-fraction-static
+      - "${SGLANG_MEM_FRACTION_STATIC}"
+      - --enable-unified-memory
+      - --speculative-algorithm
+      - DFLASH
+      - --speculative-draft-model-path
+      - "${SGLANG_DRAFT_MODEL_ID}"
+      - --speculative-dflash-block-size
+      - "${SGLANG_DFLASH_BLOCK_SIZE}"
       - --reasoning-parser
       - "${SGLANG_REASONING_PARSER}"
       - --tool-call-parser
@@ -38,9 +52,9 @@ spec:
       - --host
       - 0.0.0.0
       - --port
-      - "8000"
+      - "30000"
     modelInvocationPort:
-      containerPort: 8000
+      containerPort: 30000
       name: http
     modelVolumeMount:
       mountPath: /opt/ml/model

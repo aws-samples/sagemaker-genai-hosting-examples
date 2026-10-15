@@ -188,7 +188,13 @@ def validate_runtime_values(runtime: str, values: Mapping[str, str]) -> None:
         f"{prefix}_TENSOR_PARALLEL_SIZE",
     ]
     if runtime == "sglang":
-        numeric_keys.append("SGLANG_EXPERT_PARALLEL_SIZE")
+        numeric_keys.extend(
+            [
+                "SGLANG_PAGE_SIZE",
+                "SGLANG_CONTEXT_LENGTH",
+                "SGLANG_DFLASH_BLOCK_SIZE",
+            ]
+        )
     for key in numeric_keys:
         try:
             number = int(values[key])
@@ -196,6 +202,18 @@ def validate_runtime_values(runtime: str, values: Mapping[str, str]) -> None:
             raise ToolError(f"{key} must be a positive integer") from error
         if number <= 0:
             raise ToolError(f"{key} must be a positive integer")
+
+    if runtime == "sglang":
+        try:
+            memory_fraction = float(values["SGLANG_MEM_FRACTION_STATIC"])
+        except ValueError as error:
+            raise ToolError(
+                "SGLANG_MEM_FRACTION_STATIC must be a number greater than 0 and at most 1"
+            ) from error
+        if not 0 < memory_fraction <= 1:
+            raise ToolError(
+                "SGLANG_MEM_FRACTION_STATIC must be a number greater than 0 and at most 1"
+            )
 
 
 def render_manifest(runtime: str, values: Mapping[str, str]) -> str:
@@ -541,6 +559,8 @@ def invoke_custom(args: argparse.Namespace, base_url: str) -> int:
         str(args.max_tokens),
         "--temperature",
         str(args.temperature),
+        "--top-p",
+        str(args.top_p),
         "--timeout-seconds",
         str(args.request_timeout_seconds),
     ]
@@ -818,6 +838,7 @@ def add_invocation_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--max-tokens", type=positive_int, default=32)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--request-timeout-seconds", type=positive_int, default=300)
     parser.add_argument(
         "--request-file",
@@ -905,6 +926,8 @@ def validate_invocation_args(args: argparse.Namespace) -> None:
         raise ToolError("custom-runtime invocation requires --base-url")
     if not 0.0 <= args.temperature <= 2.0:
         raise ToolError("--temperature must be between 0 and 2")
+    if not 0.0 <= args.top_p <= 1.0:
+        raise ToolError("--top-p must be between 0 and 1")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
