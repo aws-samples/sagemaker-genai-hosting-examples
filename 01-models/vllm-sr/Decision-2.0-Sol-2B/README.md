@@ -131,27 +131,30 @@ memory result.
 
 ### Serving image results
 
-This notebook on the serving image (PyTorch 2.14.0, CUDA 13.0, Transformers 5.17.0),
-on `ml.g6.xlarge` in `eu-west-1` on October 15, 2026, passed every check, including
-model HTTP 422 for oversized state, and cleaned up. Medians of three requests:
+This notebook on the serving image (PyTorch 2.14.0, CUDA 13.0, Transformers 5.17.0), on
+`ml.g6.xlarge` in `eu-west-1` on October 15, 2026, passed every check, including the GPU
+family and dependency-range assertions and model HTTP 422 for oversized state, and cleaned
+up. The variant used a `ml.g6.xlarge,ml.g5.xlarge` pool and was placed on `ml.g6.xlarge`.
+Medians of three requests:
 
 | Questions | Server latency (ms) | SDK round trip (ms) | GPU peak allocated (GiB) |
 |---|---:|---:|---:|
-| 1 | 52.36 | 89.42 | 4.49 |
-| 8 | 89.14 | 125.02 | 4.62 |
-| 32 | 450.89 | 491.75 | 5.06 |
-| 64 | 1,056.43 | 1,096.90 | 5.66 |
+| 1 | 53.42 | 85.06 | 4.49 |
+| 8 | 89.55 | 119.84 | 4.62 |
+| 32 | 456.99 | 532.15 | 5.06 |
+| 64 | 1,069.21 | 1,101.47 | 5.66 |
 
-Worker lifetime peak RSS was 9.22 GiB. SDK round trips depend on where the client runs;
-this one ran on a laptop in London against `eu-west-1`.
+Worker lifetime peak RSS was 9.24 GiB. SDK round trips depend on where the client runs;
+this one ran on a laptop in London against `eu-west-1`. The same notebook, same commit, on
+the same pool in `us-east-1` was also placed on `ml.g6.xlarge` and passed, with server
+medians of 53.86, 87.69, 450.28 and 1,065.06 ms and identical GPU peak allocation.
 
-On `ml.g5.xlarge` (A10G) in `us-east-1` the notebook also passed, with server medians of
-64.36, 103.94, 377.94 and 718.80 ms for 1, 8, 32 and 64 questions, the same GPU peak
-allocation, and a worker peak RSS of 8.91 GiB.
-
-An earlier run of the same sample on October 9, before the per-request timeout and the
-GPU and version assertions were added, gave server medians within 5 ms of these on both
-instance types, with identical GPU peak allocation.
+On `ml.g5.xlarge` (A10G) in `us-east-1`, measured on an earlier commit, the notebook also
+passed, with server medians of 64.36, 103.94, 377.94 and 718.80 ms for 1, 8, 32 and 64
+questions, the same GPU peak allocation, and a worker peak RSS of 8.91 GiB. Earlier runs of
+this sample, before the per-request timeout and the GPU and dependency assertions were
+added, were within 10 ms of these figures on both instance types with identical GPU peak
+allocation, so none of those changes costs measurable latency.
 
 ## Runtime and performance scope
 
