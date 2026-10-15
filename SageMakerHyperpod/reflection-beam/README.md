@@ -80,10 +80,10 @@ values only after the released vLLM configuration is confirmed.
 
 Use these runtime support commits:
 
-| Runtime | Release commit |
-|---|---|
-| SGLang | [`8f94384cb5caeafc57dfa23c52bcfcedf6b88a41`](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41) |
-| vLLM | [`8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2`](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2) |
+| Runtime | Minimum version | Release commit |
+|---|---|---|
+| SGLang | `0.5.23` (provisional, pending public release) | [`8f94384cb5caeafc57dfa23c52bcfcedf6b88a41`](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41) |
+| vLLM | Pending public release confirmation | [`8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2`](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2) |
 
 The source commit is not a deployable image reference. Set `SGLANG_IMAGE` and
 `VLLM_IMAGE` to public images built from these commits and pin each image by
