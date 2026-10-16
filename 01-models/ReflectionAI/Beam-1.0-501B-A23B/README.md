@@ -67,19 +67,28 @@ file.
      --endpoint-name reflection-beam-fp8-smoke
    ```
 
-3. **Set a different positive startup timeout only when the released model requires it.**
+3. **Override an individual timeout when your selected variant needs more time.**
 
    ```bash
    python jumpstart_real_time.py \
      --variant nvfp4 \
      --endpoint-name reflection-beam-smoke \
-     --timeout-seconds 1200
+     --endpoint-timeout-seconds 10800
    ```
 
-The default `--timeout-seconds` value is `900`. The sample uses it for model
-download, container health checks, and the endpoint waiter. It rejects zero,
-negative, Boolean, or missing timeout values when you call the Python function
-directly.
+The sample uses independent deadlines for model download, container startup,
+endpoint deployment, and cleanup:
+
+| CLI option | Default |
+|---|---:|
+| `--model-download-timeout-seconds` | 3,600 seconds |
+| `--container-startup-timeout-seconds` | 3,600 seconds |
+| `--endpoint-timeout-seconds` | 7,200 seconds |
+| `--cleanup-timeout-seconds` | 7,200 seconds |
+
+This separation lets a large checkpoint take longer to deploy without
+shortening cleanup or changing the container health-check deadline. Each value
+must be a positive integer.
 
 The CLI deploys an endpoint, runs `smoke_test()`, prints the returned text, and
 then exits. It always attempts cleanup before printing the result. If cleanup
@@ -96,11 +105,11 @@ returns a predictor owned by the current run.
 
 | Function | Behavior |
 |---|---|
-| `deploy_endpoint(sagemaker_session=None, endpoint_name=None, timeout_seconds=900, variant="nvfp4")` | Resolves the selected public model ID, validates the positive timeout, creates a `JumpStartModel`, deploys it synchronously, and returns its predictor. |
+| `deploy_endpoint(...)` | Resolves the selected public model ID, validates the independent download, startup, endpoint, and cleanup timeouts, creates a `JumpStartModel`, deploys it, and returns its predictor. |
 | `invoke_endpoint(predictor, prompt, max_tokens=64, timeout_seconds=120)` | Sends one chat request with bounded connection and read timeouts, then returns `choices[0].message.content` as text. |
 | `smoke_test(predictor)` | Requests a short greeting with at most 64 output tokens and rejects empty output. |
-| `cleanup_endpoint(predictor)` | Requests endpoint deletion, waits for deletion to complete, then deletes the endpoint configuration and model. Passing `None` is safe. |
-| `run_lifecycle(sagemaker_session=None, endpoint_name=None, timeout_seconds=900, variant="nvfp4")` | Deploys the selected variant, smoke tests it, and calls cleanup from `finally` on success or smoke-test failure. |
+| `cleanup_endpoint(predictor, timeout_seconds=7200)` | Retries endpoint deletion while SageMaker finishes a transitional operation, waits for deletion, then deletes the endpoint configuration and model. Passing `None` is safe. |
+| `run_lifecycle(...)` | Deploys the selected variant with independent timeouts, smoke tests it, and calls cleanup from `finally` on success or smoke-test failure. |
 
 Use `try` and `finally` when you call the functions independently:
 
@@ -113,7 +122,8 @@ from jumpstart_real_time import (
 
 predictor = deploy_endpoint(
     endpoint_name="reflection-beam-development",
-    timeout_seconds=900,
+    endpoint_timeout_seconds=7200,
+    cleanup_timeout_seconds=7200,
 )
 try:
     output = invoke_endpoint(
@@ -139,10 +149,15 @@ documentation before release.
 
 Cleanup requests endpoint deletion and waits for it to complete before deleting
 the endpoint configuration and SageMaker model. This order prevents cleanup
-from removing resources that an endpoint still uses. If deployment fails before
-returning a predictor, the sample leaves existing and partial resources
-untouched because it cannot prove that the current run created them. Cleanup
-failures are reported instead of suppressed.
+from removing resources that an endpoint still uses. If SageMaker temporarily
+rejects deletion while the endpoint is being created or updated, cleanup waits
+and retries within its own deadline. If cleanup still cannot complete, the
+error reports the endpoint name, current status, Region when available, and an
+AWS CLI deletion command.
+
+If deployment fails before returning a predictor, the sample leaves existing
+and partial resources untouched because it cannot prove that the current run
+created them. Cleanup failures are reported instead of suppressed.
 
 ## Run the tests
 
@@ -155,4 +170,4 @@ failures are reported instead of suppressed.
 The tests stub the SageMaker SDK and do not require AWS credentials or a live
 endpoint. They verify the configured model ID, credential hygiene,
 bounded deployment timeouts, request and response validation, smoke-test
-behavior, and cleanup on success and failure.
+behavior, retryable transitional states, and cleanup on success and failure.
