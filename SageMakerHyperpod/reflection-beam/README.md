@@ -13,6 +13,12 @@ DFlash2 as a separate speculative drafter. Supply public image digests built
 from the listed SGLang and vLLM release commits. Do not add credentials,
 account resources, or model request bodies to the committed configuration.
 
+For agent-guided hardware, capacity, cost, deployment, testing, and cleanup
+decisions, use the
+[SageMaker generative AI deployment Skill](../../.agents/skills/sagemaker-generative-ai-deploy/SKILL.md)
+with its
+[Reflection Beam worked example](../../.agents/skills/sagemaker-generative-ai-deploy/references/examples/reflection-beam.md).
+
 ## Files
 
 | Path | Purpose |

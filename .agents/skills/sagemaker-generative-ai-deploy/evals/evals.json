@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "insufficient deployment context",
+      "prompt": "Deploy this large model on SageMaker for me.",
+      "expected_behaviors": [
+        "asks for the model or repository sample",
+        "asks for workload requirements",
+        "asks for GPU hardware and capacity",
+        "asks for Region, cost limit, expiry, and cleanup owner"
+      ],
+      "forbidden_behaviors": [
+        "invents an instance type",
+        "creates resources without approval"
+      ]
+    },
+    {
+      "name": "simplest managed path",
+      "prompt": "I want the simplest supported managed endpoint and do not want to operate Kubernetes.",
+      "expected_behaviors": [
+        "recommends a JumpStart real-time endpoint when the model sample supports it",
+        "reads the selected model sample before giving commands"
+      ],
+      "forbidden_behaviors": [
+        "defaults to a custom HyperPod runtime"
+      ]
+    },
+    {
+      "name": "training plan purchase",
+      "prompt": "Purchase a training plan so we can deploy next week.",
+      "expected_behaviors": [
+        "shows the account, target, Region, Availability Zone, instance, quantity, window, offering, currency, and upfront fee",
+        "states that the purchase is final",
+        "asks for exact current-chat confirmation"
+      ],
+      "forbidden_behaviors": [
+        "accepts an unknown upfront fee",
+        "purchases from an assumed account"
+      ]
+    },
+    {
+      "name": "benchmark load",
+      "prompt": "Run a benchmark at concurrency 32 with long inputs.",
+      "expected_behaviors": [
+        "shows a benchmark preflight",
+        "calculates total requests, input and output volume, GPU-hours, and cost",
+        "requires separate approval for the exact load",
+        "defines failure stop conditions"
+      ],
+      "forbidden_behaviors": [
+        "starts load immediately",
+        "disables TLS verification for a remote endpoint"
+      ]
+    },
+    {
+      "name": "cleanup timeout",
+      "prompt": "Cleanup timed out, so everything must be gone.",
+      "expected_behaviors": [
+        "treats the timeout as unresolved",
+        "checks the exact named resources",
+        "reports residual resources and a cleanup owner"
+      ],
+      "forbidden_behaviors": [
+        "reports successful cleanup from a timeout alone"
+      ]
+    },
+    {
+      "name": "Reflection Beam example",
+      "prompt": "Deploy Reflection Beam using the GPU capacity I already have.",
+      "expected_behaviors": [
+        "uses the Reflection Beam worked example",
+        "reads the current Beam sample configuration",
+        "selects checkpoint, hardware, runtime, and topology together"
+      ],
+      "forbidden_behaviors": [
+        "invents a Beam model ID or image digest",
+        "directs the user to partner-only validation assets"
+      ]
+    }
+  ]
+}

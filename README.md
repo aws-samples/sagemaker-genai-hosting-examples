@@ -25,6 +25,13 @@ If you are contributing, please add a link to your model below:
 - [Vela 2.0 0.3B on CPU](./01-models/vllm-sr/Vela-2.0-0.3B-cpu/)
 - [Decision 3.0 d3-mini (multimodal)](./01-models/vllm-sr/d3-mini/)
 
+## Agent-assisted deployment
+
+Use the
+[SageMaker generative AI deployment Skill](./.agents/skills/sagemaker-generative-ai-deploy/SKILL.md)
+to guide an agent through hardware, capacity, cost, deployment, testing, and
+cleanup decisions. Reflection Beam is included as the first worked example.
+
 ## Additional Resources
 
 - [Introduction to Large Model Inference Container](https://aws.amazon.com/blogs/machine-learning/boost-inference-performance-for-llms-with-new-amazon-sagemaker-containers/)

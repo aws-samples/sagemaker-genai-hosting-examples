@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy generative AI on SageMaker"
+  short_description: "Plan a safe SageMaker model deployment"
+  default_prompt: "Start with my model, workload, GPU hardware, capacity product, Region, cost limit, and expiry. Then recommend one supported Amazon SageMaker deployment path using the repository samples."
