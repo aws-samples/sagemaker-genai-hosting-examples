@@ -7,6 +7,12 @@ bounded smoke test, and cleans up the endpoint.
 The sample uses the released model IDs from `SageMakerPublicHub`. It defaults to
 NVFP4; use `--variant fp8` or `--variant bf16` to select another variant.
 
+For agent-guided hardware, capacity, cost, deployment, testing, and cleanup
+decisions, use the
+[SageMaker generative AI deployment Skill](../../../.agents/skills/sagemaker-generative-ai-deploy/SKILL.md)
+with its
+[Reflection Beam worked example](../../../.agents/skills/sagemaker-generative-ai-deploy/references/examples/reflection-beam.md).
+
 ## Prerequisites
 
 - Use Python 3.11 or later.
