@@ -110,6 +110,16 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('"method":"dflash"', vllm)
         self.assertIn('"revision":"' + FULL_COMMIT + '"', vllm)
 
+    def test_sglang_uses_separate_secret_backed_api_keys(self) -> None:
+        sglang = hyperpod_tool.render_manifest("sglang", configured_values())
+        self.assertIn("--api-key", sglang)
+        self.assertIn('"$(SGLANG_API_KEY)"', sglang)
+        self.assertIn("--admin-api-key", sglang)
+        self.assertIn('"$(SGLANG_ADMIN_API_KEY)"', sglang)
+        self.assertIn("name: reflection-beam-sglang-auth", sglang)
+        self.assertIn("key: api-key", sglang)
+        self.assertIn("key: admin-api-key", sglang)
+
     def test_environment_overrides_file_without_executing_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "config.env"

@@ -51,6 +51,10 @@ spec:
       - "${SGLANG_REASONING_PARSER}"
       - --tool-call-parser
       - "${SGLANG_TOOL_CALL_PARSER}"
+      - --api-key
+      - "$(SGLANG_API_KEY)"
+      - --admin-api-key
+      - "$(SGLANG_ADMIN_API_KEY)"
       - --host
       - 0.0.0.0
       - --port
@@ -61,6 +65,17 @@ spec:
     modelVolumeMount:
       mountPath: /opt/ml/model
       name: model-weights
+    environmentVariables:
+      - name: SGLANG_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: reflection-beam-sglang-auth
+            key: api-key
+      - name: SGLANG_ADMIN_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: reflection-beam-sglang-auth
+            key: admin-api-key
     resources:
       limits:
         nvidia.com/gpu: "${SGLANG_GPU_COUNT}"

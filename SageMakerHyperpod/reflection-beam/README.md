@@ -39,6 +39,8 @@ them directly.
 - GPU capacity and topology supported by the public checkpoint and runtime.
 - The AWS CLI for JumpStart endpoint invocation.
 - The `openai` package for SGLang or vLLM invocation.
+- A Kubernetes Secret containing separate SGLang inference and administrative
+  API keys.
 
 Install the client dependency in a virtual environment:
 
@@ -122,6 +124,24 @@ python hyperpod_tool.py \
   --server-dry-run
 ```
 
+Before deploying SGLang, create its authentication Secret in the deployment
+namespace. Generate two different values and avoid placing them in the
+configuration files or manifest:
+
+```bash
+SGLANG_API_KEY="$(openssl rand -hex 32)"
+SGLANG_ADMIN_API_KEY="$(openssl rand -hex 32)"
+kubectl -n <namespace> create secret generic reflection-beam-sglang-auth \
+  --from-literal=api-key="${SGLANG_API_KEY}" \
+  --from-literal=admin-api-key="${SGLANG_ADMIN_API_KEY}"
+unset SGLANG_API_KEY SGLANG_ADMIN_API_KEY
+```
+
+The SGLang manifest reads both values through Kubernetes Secret references.
+The inference key protects model requests. The separate administrative key
+protects management routes. Health probes remain available to Kubernetes
+without credentials.
+
 ## Deploy
 
 Deploy one path and wait for a terminal deployment state:
@@ -188,7 +208,22 @@ python hyperpod_tool.py invoke sglang \
 Reflection recommends `temperature=1.0` and `top_p=0.7` as starting sampling
 settings for Beam. Tune them for your workload after confirming output quality.
 
-For an authenticated gateway, pass a short-lived token through the environment:
+For SGLang, load the inference key into the client environment before invoking
+or smoke testing:
+
+```bash
+export BEAM_API_KEY="$(
+  kubectl -n <namespace> get secret reflection-beam-sglang-auth \
+    -o jsonpath='{.data.api-key}' | base64 --decode
+)"
+python hyperpod_tool.py invoke sglang \
+  --base-url http://127.0.0.1:8000/v1 \
+  --prompt "Reply with one sentence."
+unset BEAM_API_KEY
+```
+
+For another authenticated gateway, pass its short-lived token through the
+environment:
 
 ```bash
 read -rsp "Beam API token: " BEAM_API_KEY && export BEAM_API_KEY
