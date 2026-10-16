@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import sys
+import time
 import uuid
 from typing import Any
 
@@ -22,6 +23,10 @@ JUMPSTART_MODEL_IDS = {
 }
 DEFAULT_VARIANT = "nvfp4"
 WAITER_DELAY_SECONDS = 15
+DEFAULT_MODEL_DOWNLOAD_TIMEOUT_SECONDS = 3_600
+DEFAULT_CONTAINER_STARTUP_TIMEOUT_SECONDS = 3_600
+DEFAULT_ENDPOINT_TIMEOUT_SECONDS = 7_200
+DEFAULT_CLEANUP_TIMEOUT_SECONDS = 7_200
 
 
 def _resolve_model_id(variant: str) -> str:
@@ -83,16 +88,82 @@ def _require_available_endpoint_name(session: Any, endpoint_name: str) -> None:
     )
 
 
+def _session_region_name(session: Any) -> str | None:
+    region_name = getattr(session, "boto_region_name", None)
+    if region_name:
+        return str(region_name)
+    boto_session = getattr(session, "boto_session", None)
+    region_name = getattr(boto_session, "region_name", None)
+    return str(region_name) if region_name else None
+
+
+def _manual_cleanup_command(endpoint_name: str, session: Any) -> str:
+    command = f"aws sagemaker delete-endpoint --endpoint-name {endpoint_name}"
+    region_name = _session_region_name(session)
+    if region_name:
+        command += f" --region {region_name}"
+    return command
+
+
+def _is_retryable_delete_error(error: Exception) -> bool:
+    response = getattr(error, "response", {})
+    error_details = response.get("Error", {}) if isinstance(response, dict) else {}
+    code = str(error_details.get("Code", ""))
+    message = str(error_details.get("Message", "")).lower()
+    return code == "ValidationException" and any(
+        phrase in message
+        for phrase in (
+            "being created",
+            "being updated",
+            "cannot be deleted",
+            "currently in",
+            "in progress",
+        )
+    )
+
+
+def _cleanup_failure_message(
+    endpoint_name: str,
+    endpoint_status: str | None,
+    session: Any,
+) -> str:
+    status = endpoint_status or "unknown"
+    return (
+        f"Could not delete endpoint {endpoint_name}; current status: {status}. "
+        "Its endpoint configuration and model were preserved. Continue monitoring "
+        "the endpoint, then run: "
+        f"{_manual_cleanup_command(endpoint_name, session)}"
+    )
+
+
 def deploy_endpoint(
     *,
     sagemaker_session: Any = None,
     endpoint_name: str | None = None,
-    timeout_seconds: int = 900,
+    model_download_timeout_seconds: int = DEFAULT_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
+    container_startup_timeout_seconds: int = DEFAULT_CONTAINER_STARTUP_TIMEOUT_SECONDS,
+    endpoint_timeout_seconds: int = DEFAULT_ENDPOINT_TIMEOUT_SECONDS,
+    cleanup_timeout_seconds: int = DEFAULT_CLEANUP_TIMEOUT_SECONDS,
     variant: str = DEFAULT_VARIANT,
 ) -> Any:
     """Deploy the configured Beam JumpStart model to a real-time endpoint."""
     model_id = _resolve_model_id(variant)
-    timeout = _require_positive_integer(timeout_seconds, "timeout_seconds")
+    model_download_timeout = _require_positive_integer(
+        model_download_timeout_seconds,
+        "model_download_timeout_seconds",
+    )
+    container_startup_timeout = _require_positive_integer(
+        container_startup_timeout_seconds,
+        "container_startup_timeout_seconds",
+    )
+    endpoint_timeout = _require_positive_integer(
+        endpoint_timeout_seconds,
+        "endpoint_timeout_seconds",
+    )
+    cleanup_timeout = _require_positive_integer(
+        cleanup_timeout_seconds,
+        "cleanup_timeout_seconds",
+    )
     resolved_endpoint_name = _resolve_endpoint_name(endpoint_name)
     if JumpStartModel is None:
         raise RuntimeError(
@@ -115,8 +186,8 @@ def deploy_endpoint(
         predictor = model.deploy(
             endpoint_name=resolved_endpoint_name,
             wait=False,
-            model_data_download_timeout=timeout,
-            container_startup_health_check_timeout=timeout,
+            model_data_download_timeout=model_download_timeout,
+            container_startup_health_check_timeout=container_startup_timeout,
         )
         setattr(predictor, "_reflection_beam_model", model)
         waiter = predictor.sagemaker_session.sagemaker_client.get_waiter(
@@ -126,7 +197,10 @@ def deploy_endpoint(
             EndpointName=predictor.endpoint_name,
             WaiterConfig={
                 "Delay": WAITER_DELAY_SECONDS,
-                "MaxAttempts": max(1, math.ceil(timeout / WAITER_DELAY_SECONDS)),
+                "MaxAttempts": max(
+                    1,
+                    math.ceil(endpoint_timeout / WAITER_DELAY_SECONDS),
+                ),
             },
         )
         return predictor
@@ -138,12 +212,12 @@ def deploy_endpoint(
         try:
             cleanup_endpoint(
                 predictor,
-                timeout_seconds=timeout,
+                timeout_seconds=cleanup_timeout,
             )
         except Exception as cleanup_error:
             raise RuntimeError(
                 "Deployment did not complete and automatic cleanup failed for "
-                f"endpoint {resolved_endpoint_name}. Check SageMaker before retrying."
+                f"endpoint {resolved_endpoint_name}. {cleanup_error}"
             ) from cleanup_error
         raise
 
@@ -218,7 +292,7 @@ def smoke_test(predictor: Any) -> str:
 def cleanup_endpoint(
     predictor: Any | None,
     *,
-    timeout_seconds: int = 900,
+    timeout_seconds: int = DEFAULT_CLEANUP_TIMEOUT_SECONDS,
 ) -> None:
     """Delete resources owned by a predictor returned from this deployment."""
     if predictor is None:
@@ -237,43 +311,87 @@ def cleanup_endpoint(
     endpoint_name = endpoint_name.strip()
     client = session.sagemaker_client
     endpoint_config_name = endpoint_name
-    endpoint_exists = True
     endpoint_status = None
+    deadline = time.monotonic() + timeout
 
-    try:
-        endpoint_description = client.describe_endpoint(EndpointName=endpoint_name)
-        endpoint_config_name = (
-            endpoint_description.get("EndpointConfigName") or endpoint_name
-        )
-        endpoint_status = endpoint_description.get("EndpointStatus")
-    except Exception as error:
-        if _is_missing_resource(error, "endpoint"):
-            endpoint_exists = False
-        else:
+    while True:
+        try:
+            endpoint_description = client.describe_endpoint(EndpointName=endpoint_name)
+            endpoint_config_name = (
+                endpoint_description.get("EndpointConfigName") or endpoint_config_name
+            )
+            endpoint_status = endpoint_description.get("EndpointStatus")
+        except Exception as error:
+            if _is_missing_resource(error, "endpoint"):
+                break
             raise RuntimeError(
                 f"Could not inspect endpoint {endpoint_name} during cleanup."
             ) from error
 
-    if endpoint_exists:
+        if endpoint_status == "Deleting":
+            break
         try:
-            if endpoint_status != "Deleting":
-                client.delete_endpoint(EndpointName=endpoint_name)
-            waiter = client.get_waiter("endpoint_deleted")
-            waiter.wait(
-                EndpointName=endpoint_name,
-                WaiterConfig={
-                    "Delay": WAITER_DELAY_SECONDS,
-                    "MaxAttempts": max(
-                        1, math.ceil(timeout / WAITER_DELAY_SECONDS)
-                    ),
-                },
-            )
+            client.delete_endpoint(EndpointName=endpoint_name)
+            break
         except Exception as error:
-            if not _is_missing_resource(error, "endpoint"):
+            if _is_missing_resource(error, "endpoint"):
+                break
+            if not _is_retryable_delete_error(error):
                 raise RuntimeError(
-                    f"Could not delete endpoint {endpoint_name}. "
-                    "Its configuration and model were preserved."
+                    _cleanup_failure_message(
+                        endpoint_name,
+                        endpoint_status,
+                        session,
+                    )
                 ) from error
+
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            raise RuntimeError(
+                _cleanup_failure_message(
+                    endpoint_name,
+                    endpoint_status,
+                    session,
+                )
+            )
+        time.sleep(min(WAITER_DELAY_SECONDS, remaining_seconds))
+
+    remaining_seconds = deadline - time.monotonic()
+    if remaining_seconds <= 0:
+        raise RuntimeError(
+            _cleanup_failure_message(
+                endpoint_name,
+                endpoint_status,
+                session,
+            )
+        )
+    try:
+        waiter = client.get_waiter("endpoint_deleted")
+        waiter.wait(
+            EndpointName=endpoint_name,
+            WaiterConfig={
+                "Delay": WAITER_DELAY_SECONDS,
+                "MaxAttempts": max(
+                    1,
+                    math.ceil(remaining_seconds / WAITER_DELAY_SECONDS),
+                ),
+            },
+        )
+    except Exception as error:
+        if not _is_missing_resource(error, "endpoint"):
+            try:
+                endpoint_status = client.describe_endpoint(
+                    EndpointName=endpoint_name
+                ).get("EndpointStatus")
+            except Exception:
+                pass
+            raise RuntimeError(
+                _cleanup_failure_message(
+                    endpoint_name,
+                    endpoint_status,
+                    session,
+                )
+            ) from error
 
     try:
         client.delete_endpoint_config(EndpointConfigName=endpoint_config_name)
@@ -299,7 +417,10 @@ def run_lifecycle(
     *,
     sagemaker_session: Any = None,
     endpoint_name: str | None = None,
-    timeout_seconds: int = 900,
+    model_download_timeout_seconds: int = DEFAULT_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
+    container_startup_timeout_seconds: int = DEFAULT_CONTAINER_STARTUP_TIMEOUT_SECONDS,
+    endpoint_timeout_seconds: int = DEFAULT_ENDPOINT_TIMEOUT_SECONDS,
+    cleanup_timeout_seconds: int = DEFAULT_CLEANUP_TIMEOUT_SECONDS,
     variant: str = DEFAULT_VARIANT,
 ) -> str:
     """Deploy Beam, run a smoke test, and always clean up the endpoint."""
@@ -309,12 +430,18 @@ def run_lifecycle(
         predictor = deploy_endpoint(
             sagemaker_session=sagemaker_session,
             endpoint_name=endpoint_name,
-            timeout_seconds=timeout_seconds,
+            model_download_timeout_seconds=model_download_timeout_seconds,
+            container_startup_timeout_seconds=container_startup_timeout_seconds,
+            endpoint_timeout_seconds=endpoint_timeout_seconds,
+            cleanup_timeout_seconds=cleanup_timeout_seconds,
             variant=variant,
         )
         return smoke_test(predictor)
     finally:
-        cleanup_endpoint(predictor)
+        cleanup_endpoint(
+            predictor,
+            timeout_seconds=cleanup_timeout_seconds,
+        )
 
 
 def main() -> int:
@@ -322,7 +449,26 @@ def main() -> int:
         description="Run the Beam JumpStart real-time endpoint smoke-test lifecycle."
     )
     parser.add_argument("--endpoint-name")
-    parser.add_argument("--timeout-seconds", type=int, default=900)
+    parser.add_argument(
+        "--model-download-timeout-seconds",
+        type=int,
+        default=DEFAULT_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
+    )
+    parser.add_argument(
+        "--container-startup-timeout-seconds",
+        type=int,
+        default=DEFAULT_CONTAINER_STARTUP_TIMEOUT_SECONDS,
+    )
+    parser.add_argument(
+        "--endpoint-timeout-seconds",
+        type=int,
+        default=DEFAULT_ENDPOINT_TIMEOUT_SECONDS,
+    )
+    parser.add_argument(
+        "--cleanup-timeout-seconds",
+        type=int,
+        default=DEFAULT_CLEANUP_TIMEOUT_SECONDS,
+    )
     parser.add_argument(
         "--variant",
         choices=tuple(JUMPSTART_MODEL_IDS),
@@ -334,7 +480,10 @@ def main() -> int:
     try:
         output = run_lifecycle(
             endpoint_name=args.endpoint_name,
-            timeout_seconds=args.timeout_seconds,
+            model_download_timeout_seconds=args.model_download_timeout_seconds,
+            container_startup_timeout_seconds=args.container_startup_timeout_seconds,
+            endpoint_timeout_seconds=args.endpoint_timeout_seconds,
+            cleanup_timeout_seconds=args.cleanup_timeout_seconds,
             variant=args.variant,
         )
     except (RuntimeError, ValueError) as error:

@@ -139,7 +139,10 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         result = sample.deploy_endpoint(
             sagemaker_session=session,
             endpoint_name="beam-smoke-test",
-            timeout_seconds=900,
+            model_download_timeout_seconds=600,
+            container_startup_timeout_seconds=1_200,
+            endpoint_timeout_seconds=1_800,
+            cleanup_timeout_seconds=2_400,
             variant="fp8",
         )
 
@@ -151,15 +154,15 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         model.deploy.assert_called_once_with(
             endpoint_name="beam-smoke-test",
             wait=False,
-            model_data_download_timeout=900,
-            container_startup_health_check_timeout=900,
+            model_data_download_timeout=600,
+            container_startup_health_check_timeout=1_200,
         )
         session.sagemaker_client.get_waiter.assert_called_once_with(
             "endpoint_in_service"
         )
         session.sagemaker_client.get_waiter.return_value.wait.assert_called_once_with(
             EndpointName="beam-smoke-test",
-            WaiterConfig={"Delay": 15, "MaxAttempts": 60},
+            WaiterConfig={"Delay": 15, "MaxAttempts": 120},
         )
         self.assertIs(result, predictor)
 
@@ -179,7 +182,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             sample.deploy_endpoint(
                 sagemaker_session=session,
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
                 variant="fp8",
             )
 
@@ -205,7 +207,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             sample.deploy_endpoint(
                 sagemaker_session=session,
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
                 variant="fp8",
             )
 
@@ -226,13 +227,17 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
                 return_value="reflection-beam-generated",
             ),
         ):
-            sample.deploy_endpoint(timeout_seconds=900)
+            sample.deploy_endpoint(
+                model_download_timeout_seconds=600,
+                container_startup_timeout_seconds=1_200,
+                endpoint_timeout_seconds=1_800,
+            )
 
         jumpstart_model_class.return_value.deploy.assert_called_once_with(
             endpoint_name="reflection-beam-generated",
             wait=False,
-            model_data_download_timeout=900,
-            container_startup_health_check_timeout=900,
+            model_data_download_timeout=600,
+            container_startup_health_check_timeout=1_200,
         )
 
     def test_deploy_fails_clearly_before_aws_call_when_model_id_is_unavailable(self):
@@ -253,7 +258,6 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         ):
             sample.deploy_endpoint(
                 sagemaker_session=Mock(name="sagemaker_session"),
-                timeout_seconds=900,
             )
         jumpstart_model_class.assert_not_called()
 
@@ -275,12 +279,13 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         ):
             sample.deploy_endpoint(
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
+                endpoint_timeout_seconds=900,
+                cleanup_timeout_seconds=1_200,
             )
 
         cleanup.assert_called_once_with(
             predictor,
-            timeout_seconds=900,
+            timeout_seconds=1_200,
         )
 
     def test_deploy_reports_cleanup_failure_instead_of_swallowing_it(self):
@@ -308,7 +313,8 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         ):
             sample.deploy_endpoint(
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
+                endpoint_timeout_seconds=900,
+                cleanup_timeout_seconds=1_200,
             )
 
     def test_lifecycle_fails_before_aws_call_when_model_id_is_unavailable(self):
@@ -330,22 +336,31 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             sample.run_lifecycle(
                 sagemaker_session=Mock(name="sagemaker_session"),
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
             )
         jumpstart_model_class.assert_not_called()
 
-    def test_deploy_rejects_unbounded_timeout_values(self):
+    def test_deploy_rejects_non_positive_timeout_values(self):
         # Arrange
         sample, jumpstart_model_class = _load_sample_module()
 
         # Act / Assert
-        for timeout_seconds in (None, 0, -1):
-            with self.subTest(timeout_seconds=timeout_seconds):
-                with self.assertRaisesRegex(ValueError, "timeout_seconds"):
-                    sample.deploy_endpoint(
-                        sagemaker_session=Mock(name="sagemaker_session"),
-                        timeout_seconds=timeout_seconds,
-                    )
+        timeout_names = (
+            "model_download_timeout_seconds",
+            "container_startup_timeout_seconds",
+            "endpoint_timeout_seconds",
+            "cleanup_timeout_seconds",
+        )
+        for timeout_name in timeout_names:
+            for timeout_value in (None, 0, -1):
+                with self.subTest(
+                    timeout_name=timeout_name,
+                    timeout_value=timeout_value,
+                ):
+                    with self.assertRaisesRegex(ValueError, timeout_name):
+                        sample.deploy_endpoint(
+                            sagemaker_session=Mock(name="sagemaker_session"),
+                            **{timeout_name: timeout_value},
+                        )
         jumpstart_model_class.assert_not_called()
 
     def test_deploy_rejects_an_unknown_variant_before_aws_call(self):
@@ -455,7 +470,8 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         operations.attach_mock(model.delete_model, "delete_model")
 
         sample.cleanup_endpoint(None)
-        sample.cleanup_endpoint(predictor, timeout_seconds=900)
+        with patch.object(sample.time, "monotonic", side_effect=[0, 0]):
+            sample.cleanup_endpoint(predictor, timeout_seconds=900)
 
         client.describe_endpoint.assert_called_once_with(
             EndpointName="beam-smoke-test"
@@ -498,6 +514,79 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         client.delete_endpoint_config.assert_not_called()
         predictor._reflection_beam_model.delete_model.assert_not_called()
 
+    def test_cleanup_retries_delete_after_creating_state_rejection(self):
+        sample, _ = _load_sample_module()
+        predictor = Mock(name="predictor")
+        predictor.endpoint_name = "beam-smoke-test"
+        client = predictor.sagemaker_session.sagemaker_client
+        client.describe_endpoint.side_effect = [
+            {
+                "EndpointConfigName": "beam-smoke-test-config",
+                "EndpointStatus": "Creating",
+            },
+            {
+                "EndpointConfigName": "beam-smoke-test-config",
+                "EndpointStatus": "InService",
+            },
+        ]
+
+        transient_error = RuntimeError("endpoint is being created")
+        transient_error.response = {
+            "Error": {
+                "Code": "ValidationException",
+                "Message": "Endpoint is being created and cannot be deleted.",
+            }
+        }
+        client.delete_endpoint.side_effect = [transient_error, None]
+
+        with (
+            patch.object(sample.time, "monotonic", side_effect=[0, 0, 15]),
+            patch.object(sample.time, "sleep") as sleep,
+        ):
+            sample.cleanup_endpoint(predictor, timeout_seconds=60)
+
+        self.assertEqual(client.delete_endpoint.call_count, 2)
+        sleep.assert_called_once_with(15)
+        client.get_waiter.return_value.wait.assert_called_once_with(
+            EndpointName="beam-smoke-test",
+            WaiterConfig={"Delay": 15, "MaxAttempts": 3},
+        )
+        client.delete_endpoint_config.assert_called_once_with(
+            EndpointConfigName="beam-smoke-test-config"
+        )
+        predictor._reflection_beam_model.delete_model.assert_called_once_with()
+
+    def test_cleanup_timeout_reports_status_region_and_command(self):
+        sample, _ = _load_sample_module()
+        predictor = Mock(name="predictor")
+        predictor.endpoint_name = "beam-smoke-test"
+        predictor.sagemaker_session.boto_region_name = "us-east-1"
+        client = predictor.sagemaker_session.sagemaker_client
+        client.describe_endpoint.return_value = {
+            "EndpointConfigName": "beam-smoke-test-config",
+            "EndpointStatus": "Creating",
+        }
+        transient_error = RuntimeError("endpoint is being created")
+        transient_error.response = {
+            "Error": {
+                "Code": "ValidationException",
+                "Message": "Endpoint is being created and cannot be deleted.",
+            }
+        }
+        client.delete_endpoint.side_effect = transient_error
+
+        with (
+            patch.object(sample.time, "monotonic", side_effect=[0, 61]),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "current status: Creating.*delete-endpoint.*us-east-1",
+            ),
+        ):
+            sample.cleanup_endpoint(predictor, timeout_seconds=60)
+
+        client.delete_endpoint_config.assert_not_called()
+        predictor._reflection_beam_model.delete_model.assert_not_called()
+
     def test_cleanup_without_owned_predictor_is_a_noop(self):
         sample, _ = _load_sample_module()
 
@@ -528,7 +617,10 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
             result = sample.run_lifecycle(
                 sagemaker_session=session,
                 endpoint_name="beam-smoke-test",
-                timeout_seconds=900,
+                model_download_timeout_seconds=600,
+                container_startup_timeout_seconds=1_200,
+                endpoint_timeout_seconds=1_800,
+                cleanup_timeout_seconds=2_400,
                 variant="fp8",
             )
 
@@ -536,11 +628,14 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
         deploy.assert_called_once_with(
             sagemaker_session=session,
             endpoint_name="beam-smoke-test",
-            timeout_seconds=900,
+            model_download_timeout_seconds=600,
+            container_startup_timeout_seconds=1_200,
+            endpoint_timeout_seconds=1_800,
+            cleanup_timeout_seconds=2_400,
             variant="fp8",
         )
         smoke.assert_called_once_with(predictor)
-        cleanup.assert_called_once_with(predictor)
+        cleanup.assert_called_once_with(predictor, timeout_seconds=2_400)
         self.assertEqual(result, "Beam is ready.")
 
     def test_lifecycle_always_cleans_up_after_smoke_failure(self):
@@ -559,9 +654,9 @@ class JumpStartRealTimeContractTests(unittest.TestCase):
                 sample.run_lifecycle(
                     sagemaker_session=Mock(name="sagemaker_session"),
                     endpoint_name="beam-smoke-test",
-                    timeout_seconds=900,
+                    cleanup_timeout_seconds=2_400,
                 )
-        cleanup.assert_called_once_with(predictor)
+        cleanup.assert_called_once_with(predictor, timeout_seconds=2_400)
 
 
 if __name__ == "__main__":
