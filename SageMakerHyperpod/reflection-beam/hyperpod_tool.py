@@ -194,6 +194,12 @@ def validate_runtime_values(runtime: str, values: Mapping[str, str]) -> None:
     if not COMMIT_SHA_RE.fullmatch(commit_sha):
         raise ToolError(f"{prefix}_MODEL_COMMIT_SHA must be a full 40-character SHA")
 
+    draft_commit_sha = values["DFLASH_MODEL_COMMIT_SHA"]
+    if not COMMIT_SHA_RE.fullmatch(draft_commit_sha):
+        raise ToolError(
+            "DFLASH_MODEL_COMMIT_SHA must be a full 40-character SHA"
+        )
+
     numeric_keys = [
         f"{prefix}_GPU_COUNT",
         f"{prefix}_TENSOR_PARALLEL_SIZE",

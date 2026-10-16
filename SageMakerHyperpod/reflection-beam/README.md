@@ -7,13 +7,11 @@ SageMaker HyperPod Inference:
 - SGLang with `InferenceEndpointConfig`.
 - vLLM with `InferenceEndpointConfig`.
 
-The sample includes the public JumpStart model IDs. The SGLang path loads a
-selected Beam BF16, FP8, or NVFP4 target checkpoint and configures DFlash2 as a
-separate speculative drafter. The vLLM path serves the selected target
-checkpoint without speculative decoding until its released Beam configuration
-is confirmed. Supply public image digests built from the listed SGLang and vLLM
-release commits. Do not add credentials, account resources, or model request
-bodies to the committed configuration.
+The sample includes the public JumpStart model IDs. The SGLang and vLLM paths
+load a selected Beam BF16, FP8, or NVFP4 target checkpoint and configure
+DFlash2 as a separate speculative drafter. Supply public image digests built
+from the listed SGLang and vLLM release commits. Do not add credentials,
+account resources, or model request bodies to the committed configuration.
 
 ## Files
 
@@ -41,6 +39,8 @@ them directly.
 - GPU capacity and topology supported by the public checkpoint and runtime.
 - The AWS CLI for JumpStart endpoint invocation.
 - The `openai` package for SGLang or vLLM invocation.
+- A Kubernetes Secret containing separate SGLang inference and administrative
+  API keys.
 
 Install the client dependency in a virtual environment:
 
@@ -63,11 +63,13 @@ Set the deployment values for the path you will use. Keep runtime-specific
 values together; a checkpoint, image, parser, quantization mode, and parallel
 layout must be compatible with each other.
 
+Set `DFLASH_MODEL_ID` and `DFLASH_MODEL_COMMIT_SHA` to the released DFlash2
+checkpoint. Both custom runtime templates use these shared values to load the
+same immutable draft revision.
+
 For SGLang, set `SGLANG_MODEL_ID` and `SGLANG_MODEL_COMMIT_SHA` to the target
-Beam checkpoint. The example release configuration selects NVFP4 and requires
-you to add its full public commit SHA. The manifest loads
-`reflection/Beam-1.0-501B-A23B-DFlash2` separately with the DFlash algorithm,
-unified memory, and a draft block size of 8.
+Beam checkpoint. The example release configuration selects NVFP4. The manifest
+uses the DFlash algorithm, unified memory, and a draft block size of 8.
 
 Set the SGLang GPU count and tensor parallel size for the selected target and
 instance type. The supplied launch guidance uses TP4 for NVFP4 or FP8 on B300,
@@ -75,8 +77,9 @@ TP8 for BF16 on B300, and TP8 for FP8 or BF16 on H200. Keep the page size,
 context length, memory fraction, attention backend, target checkpoint, and
 draft checkpoint compatible with the released runtime.
 
-The vLLM template does not enable DFlash2. Its example configuration uses the
-NVFP4 checkpoint with the AWS vLLM DLC pinned by image digest.
+For vLLM, set `VLLM_MODEL_ID` and `VLLM_MODEL_COMMIT_SHA` to the target Beam
+checkpoint. The example configuration selects NVFP4, enables DFlash2 with
+seven speculative tokens, and pins the AWS vLLM DLC by image digest.
 
 Use these runtime support commits:
 
@@ -120,6 +123,24 @@ python hyperpod_tool.py \
   validate vllm \
   --server-dry-run
 ```
+
+Before deploying SGLang, create its authentication Secret in the deployment
+namespace. Generate two different values and avoid placing them in the
+configuration files or manifest:
+
+```bash
+SGLANG_API_KEY="$(openssl rand -hex 32)"
+SGLANG_ADMIN_API_KEY="$(openssl rand -hex 32)"
+kubectl -n <namespace> create secret generic reflection-beam-sglang-auth \
+  --from-literal=api-key="${SGLANG_API_KEY}" \
+  --from-literal=admin-api-key="${SGLANG_ADMIN_API_KEY}"
+unset SGLANG_API_KEY SGLANG_ADMIN_API_KEY
+```
+
+The SGLang manifest reads both values through Kubernetes Secret references.
+The inference key protects model requests. The separate administrative key
+protects management routes. Health probes remain available to Kubernetes
+without credentials.
 
 ## Deploy
 
@@ -187,7 +208,22 @@ python hyperpod_tool.py invoke sglang \
 Reflection recommends `temperature=1.0` and `top_p=0.7` as starting sampling
 settings for Beam. Tune them for your workload after confirming output quality.
 
-For an authenticated gateway, pass a short-lived token through the environment:
+For SGLang, load the inference key into the client environment before invoking
+or smoke testing:
+
+```bash
+export BEAM_API_KEY="$(
+  kubectl -n <namespace> get secret reflection-beam-sglang-auth \
+    -o jsonpath='{.data.api-key}' | base64 --decode
+)"
+python hyperpod_tool.py invoke sglang \
+  --base-url http://127.0.0.1:8000/v1 \
+  --prompt "Reply with one sentence."
+unset BEAM_API_KEY
+```
+
+For another authenticated gateway, pass its short-lived token through the
+environment:
 
 ```bash
 read -rsp "Beam API token: " BEAM_API_KEY && export BEAM_API_KEY
@@ -305,6 +341,6 @@ The tests do not require a cluster, AWS credentials, or the `openai` package.
 - [Deploy JumpStart models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy.html)
 - [Deploy custom models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy-ftm.html)
 - [Reflection Beam model collection](https://huggingface.co/collections/reflection/beam)
-- [Beam DFlash2 draft checkpoint](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2/tree/8d26c952ec6a82a9a18825d6126c9f6948149ad9)
+- [Beam DFlash2 draft checkpoint](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2/tree/9863645c67e53669c4040e4c0b00ab5089352d11)
 - [SGLang Beam release commit](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41)
 - [vLLM Beam release commit](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2)

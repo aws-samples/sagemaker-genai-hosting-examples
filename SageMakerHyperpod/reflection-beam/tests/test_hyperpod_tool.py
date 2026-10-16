@@ -24,6 +24,8 @@ def configured_values() -> dict[str, str]:
         "JUMPSTART_INSTANCE_TYPE": "ml.example.1xlarge",
         "JUMPSTART_MODEL_ID": "public-beam-jumpstart",
         "JUMPSTART_MODEL_VERSION": "1.0.0",
+        "DFLASH_MODEL_ID": "reflection/example-beam-dflash2",
+        "DFLASH_MODEL_COMMIT_SHA": FULL_COMMIT,
         "SGLANG_INSTANCE_TYPE": "ml.example.8xlarge",
         "SGLANG_GPU_COUNT": "8",
         "SGLANG_TENSOR_PARALLEL_SIZE": "8",
@@ -34,7 +36,6 @@ def configured_values() -> dict[str, str]:
         "SGLANG_DFLASH_BLOCK_SIZE": "8",
         "SGLANG_MODEL_ID": "reflection/example-beam",
         "SGLANG_MODEL_COMMIT_SHA": FULL_COMMIT,
-        "SGLANG_DRAFT_MODEL_ID": "reflection/example-beam-dflash2",
         "SGLANG_IMAGE": PUBLIC_DIGEST,
         "SGLANG_REASONING_PARSER": "documented-parser",
         "SGLANG_TOOL_CALL_PARSER": "documented-tool-parser",
@@ -68,7 +69,7 @@ class ConfigTests(unittest.TestCase):
         ):
             hyperpod_tool.render_manifest("sglang", values)
 
-    def test_release_config_separates_sglang_target_and_drafter(self) -> None:
+    def test_release_config_separates_target_and_drafter(self) -> None:
         values = hyperpod_tool.parse_env_file(
             hyperpod_tool.SAMPLE_ROOT / "config/release.env.example"
         )
@@ -77,12 +78,16 @@ class ConfigTests(unittest.TestCase):
             "reflection/Beam-1.0-501B-A23B-NVFP4",
         )
         self.assertEqual(
-            values["SGLANG_DRAFT_MODEL_ID"],
+            values["DFLASH_MODEL_ID"],
             "reflection/Beam-1.0-501B-A23B-DFlash2",
         )
         self.assertNotEqual(
             values["SGLANG_MODEL_ID"],
-            values["SGLANG_DRAFT_MODEL_ID"],
+            values["DFLASH_MODEL_ID"],
+        )
+        self.assertEqual(
+            values["DFLASH_MODEL_COMMIT_SHA"],
+            "9863645c67e53669c4040e4c0b00ab5089352d11",
         )
         self.assertEqual(
             values["SGLANG_MODEL_COMMIT_SHA"],
@@ -93,6 +98,27 @@ class ConfigTests(unittest.TestCase):
             "reflection/Beam-1.0-501B-A23B-NVFP4",
         )
         self.assertFalse(hyperpod_tool.is_placeholder(values["VLLM_IMAGE"]))
+
+    def test_custom_runtime_manifests_pin_dflash2(self) -> None:
+        values = configured_values()
+        sglang = hyperpod_tool.render_manifest("sglang", values)
+        self.assertIn("--speculative-draft-model-revision", sglang)
+        self.assertIn(FULL_COMMIT, sglang)
+
+        vllm = hyperpod_tool.render_manifest("vllm", values)
+        self.assertIn("--speculative-config", vllm)
+        self.assertIn('"method":"dflash"', vllm)
+        self.assertIn('"revision":"' + FULL_COMMIT + '"', vllm)
+
+    def test_sglang_uses_separate_secret_backed_api_keys(self) -> None:
+        sglang = hyperpod_tool.render_manifest("sglang", configured_values())
+        self.assertIn("--api-key", sglang)
+        self.assertIn('"$(SGLANG_API_KEY)"', sglang)
+        self.assertIn("--admin-api-key", sglang)
+        self.assertIn('"$(SGLANG_ADMIN_API_KEY)"', sglang)
+        self.assertIn("name: reflection-beam-sglang-auth", sglang)
+        self.assertIn("key: api-key", sglang)
+        self.assertIn("key: admin-api-key", sglang)
 
     def test_environment_overrides_file_without_executing_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -162,6 +188,14 @@ class ConfigTests(unittest.TestCase):
         values["SGLANG_MODEL_COMMIT_SHA"] = "abc123"
         with self.assertRaisesRegex(hyperpod_tool.ToolError, "40-character"):
             hyperpod_tool.render_manifest("sglang", values)
+
+        values = configured_values()
+        values["DFLASH_MODEL_COMMIT_SHA"] = "abc123"
+        with self.assertRaisesRegex(
+            hyperpod_tool.ToolError,
+            "DFLASH_MODEL_COMMIT_SHA must be a full 40-character SHA",
+        ):
+            hyperpod_tool.render_manifest("vllm", values)
 
     def test_rejects_invalid_sglang_memory_fraction(self) -> None:
         for value in ("0", "1.1", "not-a-number"):
@@ -311,8 +345,8 @@ class SafetyTests(unittest.TestCase):
             prefix = runtime.upper()
             for suffix in release_keys:
                 self.assertIn(f"${{{prefix}_{suffix}}}", content)
-            if runtime == "sglang":
-                self.assertIn("${SGLANG_DRAFT_MODEL_ID}", content)
+            self.assertIn("${DFLASH_MODEL_ID}", content)
+            self.assertIn("${DFLASH_MODEL_COMMIT_SHA}", content)
 
 
 class MainTests(unittest.TestCase):
