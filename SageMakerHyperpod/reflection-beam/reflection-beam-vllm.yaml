@@ -26,6 +26,9 @@ spec:
       - reflection-beam
       - --tensor-parallel-size
       - "${VLLM_TENSOR_PARALLEL_SIZE}"
+      - --speculative-config
+      - >-
+        {"method":"dflash","model":"${DFLASH_MODEL_ID}","revision":"${DFLASH_MODEL_COMMIT_SHA}","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN"}
       - --enable-auto-tool-choice
       - --reasoning-parser
       - "${VLLM_REASONING_PARSER}"

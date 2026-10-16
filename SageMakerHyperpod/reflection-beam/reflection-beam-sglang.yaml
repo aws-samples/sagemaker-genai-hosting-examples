@@ -42,7 +42,9 @@ spec:
       - --speculative-algorithm
       - DFLASH
       - --speculative-draft-model-path
-      - "${SGLANG_DRAFT_MODEL_ID}"
+      - "${DFLASH_MODEL_ID}"
+      - --speculative-draft-model-revision
+      - "${DFLASH_MODEL_COMMIT_SHA}"
       - --speculative-dflash-block-size
       - "${SGLANG_DFLASH_BLOCK_SIZE}"
       - --reasoning-parser

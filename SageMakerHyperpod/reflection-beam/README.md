@@ -7,13 +7,11 @@ SageMaker HyperPod Inference:
 - SGLang with `InferenceEndpointConfig`.
 - vLLM with `InferenceEndpointConfig`.
 
-The sample includes the public JumpStart model IDs. The SGLang path loads a
-selected Beam BF16, FP8, or NVFP4 target checkpoint and configures DFlash2 as a
-separate speculative drafter. The vLLM path serves the selected target
-checkpoint without speculative decoding until its released Beam configuration
-is confirmed. Supply public image digests built from the listed SGLang and vLLM
-release commits. Do not add credentials, account resources, or model request
-bodies to the committed configuration.
+The sample includes the public JumpStart model IDs. The SGLang and vLLM paths
+load a selected Beam BF16, FP8, or NVFP4 target checkpoint and configure
+DFlash2 as a separate speculative drafter. Supply public image digests built
+from the listed SGLang and vLLM release commits. Do not add credentials,
+account resources, or model request bodies to the committed configuration.
 
 ## Files
 
@@ -63,11 +61,13 @@ Set the deployment values for the path you will use. Keep runtime-specific
 values together; a checkpoint, image, parser, quantization mode, and parallel
 layout must be compatible with each other.
 
+Set `DFLASH_MODEL_ID` and `DFLASH_MODEL_COMMIT_SHA` to the released DFlash2
+checkpoint. Both custom runtime templates use these shared values to load the
+same immutable draft revision.
+
 For SGLang, set `SGLANG_MODEL_ID` and `SGLANG_MODEL_COMMIT_SHA` to the target
-Beam checkpoint. The example release configuration selects NVFP4 and requires
-you to add its full public commit SHA. The manifest loads
-`reflection/Beam-1.0-501B-A23B-DFlash2` separately with the DFlash algorithm,
-unified memory, and a draft block size of 8.
+Beam checkpoint. The example release configuration selects NVFP4. The manifest
+uses the DFlash algorithm, unified memory, and a draft block size of 8.
 
 Set the SGLang GPU count and tensor parallel size for the selected target and
 instance type. The supplied launch guidance uses TP4 for NVFP4 or FP8 on B300,
@@ -75,8 +75,9 @@ TP8 for BF16 on B300, and TP8 for FP8 or BF16 on H200. Keep the page size,
 context length, memory fraction, attention backend, target checkpoint, and
 draft checkpoint compatible with the released runtime.
 
-The vLLM template does not enable DFlash2. Its example configuration uses the
-NVFP4 checkpoint with the AWS vLLM DLC pinned by image digest.
+For vLLM, set `VLLM_MODEL_ID` and `VLLM_MODEL_COMMIT_SHA` to the target Beam
+checkpoint. The example configuration selects NVFP4, enables DFlash2 with
+seven speculative tokens, and pins the AWS vLLM DLC by image digest.
 
 Use these runtime support commits:
 
@@ -305,6 +306,6 @@ The tests do not require a cluster, AWS credentials, or the `openai` package.
 - [Deploy JumpStart models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy.html)
 - [Deploy custom models](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-deploy-ftm.html)
 - [Reflection Beam model collection](https://huggingface.co/collections/reflection/beam)
-- [Beam DFlash2 draft checkpoint](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2/tree/8d26c952ec6a82a9a18825d6126c9f6948149ad9)
+- [Beam DFlash2 draft checkpoint](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2/tree/9863645c67e53669c4040e4c0b00ab5089352d11)
 - [SGLang Beam release commit](https://github.com/radixark/sglang-reflection-oss/commit/8f94384cb5caeafc57dfa23c52bcfcedf6b88a41)
 - [vLLM Beam release commit](https://github.com/Inferact/lin/commit/8e0922e88bf9d4d5c0031f817a4e4749c9ca4ec2)
