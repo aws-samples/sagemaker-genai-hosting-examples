@@ -7,6 +7,12 @@ bounded smoke test, and cleans up the endpoint.
 The sample uses the released model IDs from `SageMakerPublicHub`. It defaults to
 NVFP4; use `--variant fp8` or `--variant bf16` to select another variant.
 
+This folder also contains a custom-container sample for the NVFP4 checkpoint on
+`ml.g7e.24xlarge` (4x NVIDIA RTX PRO 6000 Blackwell). Use it when you need that
+instance type or a specific vLLM configuration, such as the full 1M-token
+context with an FP8 KV cache or DFlash2 speculative decoding. See
+[Deploy NVFP4 on ml.g7e.24xlarge with a custom vLLM container](#deploy-nvfp4-on-mlg7e24xlarge-with-a-custom-vllm-container).
+
 For agent-guided hardware, capacity, cost, deployment, testing, and cleanup
 decisions, use the
 [SageMaker generative AI deployment Skill](../../../.agents/skills/sagemaker-generative-ai-deploy/SKILL.md)
@@ -177,3 +183,224 @@ The tests stub the SageMaker SDK and do not require AWS credentials or a live
 endpoint. They verify the configured model ID, credential hygiene,
 bounded deployment timeouts, request and response validation, smoke-test
 behavior, retryable transitional states, and cleanup on success and failure.
+
+## Deploy NVFP4 on ml.g7e.24xlarge with a custom vLLM container
+
+This path deploys the NVFP4 checkpoint to a SageMaker AI real-time endpoint on
+`ml.g7e.24xlarge` (4x NVIDIA RTX PRO 6000 Blackwell Server Edition, 96 GB
+each, SM120) with a bring-your-own-container (BYOC) image and weights that you
+stage to Amazon S3. It is a custom runtime, so you manage the image, weights,
+and vLLM flags yourself. Prefer the JumpStart lifecycle CLI above when its
+supported instance types meet your needs.
+
+| Path | Purpose |
+|---|---|
+| `Beam-1.0-501B-A23B-g7e.ipynb` | Deploy, invoke (text, tool calling, streaming), and clean up |
+| `container-g7e/` | Serving image: `Dockerfile`, `serve` entrypoint, `nginx.conf` |
+| `buildspec-image-g7e.yml` | AWS CodeBuild: build and push the serving image to Amazon ECR |
+| `buildspec-weights.yml` | AWS CodeBuild: stream the checkpoint from Hugging Face to S3 |
+
+### Requirements
+
+- **Serving image built from [`container-g7e/`](container-g7e/).** It is the
+  public model-specific image `vllm/vllm-openai:reflection-beam`, pinned by
+  digest, plus nginx for the SageMaker `/ping` and `/invocations` contract.
+  This image carries `BeamForCausalLM` and the `beam` reasoning and tool-call
+  parsers. The `serve` entrypoint maps `SM_VLLM_*` environment variables to
+  `vllm serve` flags, the same convention as the AWS vLLM DLC.
+- **Instance `ml.g7e.24xlarge`** with quota for `ml.g7e.24xlarge for endpoint
+  usage` (the default is 0).
+- **Inference AMI `al2023-ami-sagemaker-inference-gpu-4-1`** (driver 580 /
+  CUDA 13), which matches the image's CUDA 13 build.
+- An IAM execution role with read access to the weights bucket and pull access
+  to your ECR repository. The Beam weights are public; a Hugging Face token is
+  optional and only raises download rate limits.
+
+### Stage the weights to S3
+
+The ~294 GB checkpoint is streamed from Hugging Face to S3 by an AWS CodeBuild
+job, so you do not need local disk. The job copies files in parallel, checks
+each object's size against the Hugging Face metadata, and skips files that are
+already staged, so you can safely re-run it.
+
+1. **Set the shell variables.**
+
+   ```bash
+   export AWS_REGION=<YOUR_REGION>
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export BUCKET=<YOUR_BUCKET>            # existing bucket in the same Region
+   export HF_REPO=reflection/Beam-1.0-501B-A23B-NVFP4
+   export WEIGHTS_PREFIX=models/beam-1.0-501b-nvfp4
+   export CB_ROLE=<YOUR_CODEBUILD_ROLE_NAME>
+   ```
+
+2. **Create a CodeBuild service role scoped to your bucket and the CodeBuild
+   log groups, and upload the buildspec.**
+
+   ```bash
+   aws iam create-role --role-name ${CB_ROLE} \
+     --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"codebuild.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+   aws iam put-role-policy --role-name ${CB_ROLE} --policy-name weights-staging \
+     --policy-document '{"Version":"2012-10-17","Statement":[
+       {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:AbortMultipartUpload","s3:ListBucket"],
+        "Resource":["arn:aws:s3:::'"${BUCKET}"'","arn:aws:s3:::'"${BUCKET}"'/*"]},
+       {"Effect":"Allow","Action":["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+        "Resource":"arn:aws:logs:'"${AWS_REGION}"':'"${ACCOUNT_ID}"':log-group:/aws/codebuild/*"}]}'
+   export CB_ROLE_ARN=$(aws iam get-role --role-name ${CB_ROLE} --query Role.Arn --output text)
+   sleep 15  # IAM propagation
+
+   zip /tmp/beam-weights-src.zip buildspec-weights.yml
+   aws s3 cp /tmp/beam-weights-src.zip s3://${BUCKET}/build/beam-weights-src.zip
+   ```
+
+3. **Create and run the staging build.** The 8-hour timeout leaves headroom for
+   slow Hugging Face throughput.
+
+   ```bash
+   aws codebuild create-project \
+     --name beam-weights \
+     --source "type=S3,location=$BUCKET/build/beam-weights-src.zip,buildspec=buildspec-weights.yml" \
+     --artifacts type=NO_ARTIFACTS \
+     --service-role "$CB_ROLE_ARN" \
+     --timeout-in-minutes 480 \
+     --environment "type=LINUX_CONTAINER,image=aws/codebuild/amazonlinux-x86_64-standard:5.0,computeType=BUILD_GENERAL1_LARGE,environmentVariables=[{name=HF_REPO,value=${HF_REPO}},{name=BUCKET,value=${BUCKET}},{name=PREFIX,value=${WEIGHTS_PREFIX}}]"
+
+   aws codebuild start-build --project-name beam-weights
+   ```
+
+The notebook mounts `s3://${BUCKET}/${WEIGHTS_PREFIX}/` read-only at
+`/opt/ml/model`. To use a Hugging Face token, store it in AWS Secrets Manager
+and add it to the project as a `SECRETS_MANAGER` environment variable named
+`HF_TOKEN`; do not pass it in plain text.
+
+### Build the serving image
+
+Run once in the same Region as the endpoint, reusing the variables above:
+
+```bash
+export REPO=<YOUR_ECR_REPOSITORY>
+export REGISTRY=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+export IMAGE=${REGISTRY}/${REPO}:reflection-beam
+aws ecr create-repository --repository-name ${REPO}
+
+# Allow the CodeBuild role to push to the repository.
+aws iam put-role-policy --role-name ${CB_ROLE} --policy-name ecr-push \
+  --policy-document '{"Version":"2012-10-17","Statement":[
+    {"Effect":"Allow","Action":"ecr:GetAuthorizationToken","Resource":"*"},
+    {"Effect":"Allow","Action":["ecr:BatchCheckLayerAvailability","ecr:InitiateLayerUpload","ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload","ecr:PutImage","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer"],
+     "Resource":"arn:aws:ecr:'"${AWS_REGION}"':'"${ACCOUNT_ID}"':repository/'"${REPO}"'"}]}'
+
+zip -r /tmp/beam-g7e-src.zip buildspec-image-g7e.yml container-g7e
+aws s3 cp /tmp/beam-g7e-src.zip s3://${BUCKET}/build/beam-g7e-src.zip
+
+aws codebuild create-project \
+  --name beam-g7e-image \
+  --source "type=S3,location=$BUCKET/build/beam-g7e-src.zip,buildspec=buildspec-image-g7e.yml" \
+  --artifacts type=NO_ARTIFACTS \
+  --service-role "$CB_ROLE_ARN" \
+  --timeout-in-minutes 120 \
+  --environment "type=LINUX_CONTAINER,image=aws/codebuild/amazonlinux-x86_64-standard:5.0,computeType=BUILD_GENERAL1_LARGE,privilegedMode=true,environmentVariables=[{name=REGISTRY,value=${REGISTRY}},{name=IMAGE,value=${IMAGE}}]"
+
+aws codebuild start-build --project-name beam-g7e-image
+```
+
+The SageMaker execution role also needs `ecr:BatchGetImage`,
+`ecr:GetDownloadUrlForLayer`, and `ecr:GetAuthorizationToken` to pull the image.
+
+### Deploy with the notebook
+
+Open [`Beam-1.0-501B-A23B-g7e.ipynb`](Beam-1.0-501B-A23B-g7e.ipynb), set
+`bucket` and `ecr_repository`, and run the cells. The notebook creates the
+model, endpoint configuration, and endpoint; runs text, tool-calling, and
+streaming requests; and deletes all three resources in its cleanup cell.
+
+The notebook sets this vLLM configuration through `SM_VLLM_*` variables:
+
+| Setting | Value |
+|---|---|
+| Tensor parallelism | 4 |
+| Context length | `--max-model-len 1048576` |
+| KV cache | `--kv-cache-dtype fp8_e4m3`, `--enable-prefix-caching` |
+| Batching | `--enable-chunked-prefill`, `--max-num-batched-tokens 16384`, `--max-num-seqs 16` |
+| Memory and loading | `--gpu-memory-utilization 0.92`, `--safetensors-load-strategy eager` |
+| Parsers | `--reasoning-parser beam`, `--tool-call-parser beam`, `--enable-auto-tool-choice` |
+| Environment | `VLLM_ENGINE_READY_TIMEOUT_S=3600` |
+
+vLLM detects NVFP4 from the checkpoint, so no `--quantization` flag is needed.
+The endpoint configuration sets 3,600-second model download and container
+startup health-check timeouts. Synchronous `invoke_endpoint` calls time out
+after 60 seconds, so use `invoke_endpoint_with_response_stream` for long
+reasoning generations. Reasoning tokens count against `max_tokens`, so keep it
+at 2,048 or more.
+
+The endpoint bills for as long as it exists. Run the cleanup cell when you are
+done. The staged weights in S3 and the image in ECR persist and incur storage
+cost until you delete them.
+
+### Optional: DFlash2 speculative decoding
+
+Stage the
+[Beam-1.0-501B-A23B-DFlash2](https://huggingface.co/reflection/Beam-1.0-501B-A23B-DFlash2)
+drafter into a `dflash2/` folder next to the target weights, for example with
+the same staging project:
+
+```bash
+aws codebuild start-build --project-name beam-weights \
+  --environment-variables-override \
+    name=HF_REPO,value=reflection/Beam-1.0-501B-A23B-DFlash2 \
+    name=PREFIX,value=${WEIGHTS_PREFIX}/dflash2
+```
+
+Then add this setting to `vllm_env` in the notebook:
+
+```python
+"SM_VLLM_SPECULATIVE_CONFIG": '{"method":"dflash","model":"/opt/ml/model/dflash2","num_speculative_tokens":7,"enable_adaptive_verification":false}',
+```
+
+On SM120 GPUs, keep `enable_adaptive_verification` set to `false`. Do not force
+`attention_backend`: FlashAttention rejects the FP8 KV cache on SM120, and vLLM
+selects the Triton backend when you leave it unset.
+
+### Validation and limitations
+
+The SageMaker endpoint path in this notebook has **not yet been run end to
+end** because the test account had no `ml.g7e.24xlarge` endpoint quota. The
+engine was validated on Amazon EC2 `g7e.24xlarge` with the same base image
+digest and vLLM flags, served directly without the nginx layer:
+
+- The engine became healthy in about 5–6 minutes.
+- Reasoning, tool calling, and needle retrieval from a ~105K-token prompt
+  passed.
+
+Throughput was measured with [AIPerf](https://github.com/ai-dynamo/aiperf) at
+12.7K input and up to 5.3K output tokens per request, streaming, directly
+against the engine:
+
+| Concurrent requests | Time to first token | Inter-token latency | Output tokens/s per user |
+|---:|---:|---:|---:|
+| 2 | 1.75 s | 12.1 ms | 78 |
+| 4 | ~3.0 s | 14.8 ms | 62 |
+| 8 | 4.59 s | 20.8 ms | 44 |
+
+For comparison, EC2 `g7e.48xlarge` (8 GPUs, TP8) with the same profile measured
+12.6 / 14.1 / 17.0 ms inter-token latency and 76 / 66 / 55 output tokens/s per
+user at 2 / 4 / 8 concurrent requests.
+
+DFlash2 was validated on EC2 `g7e.48xlarge` only, measured with and without the
+drafter on the same instance:
+
+| Workload | Concurrency | Tokens/s per user without DFlash2 | With DFlash2 |
+|---|---:|---:|---:|
+| Natural-text prompts | 1 | 83 | 202 |
+| Natural-text prompts | 4 | 72 | 134 |
+| Synthetic AIPerf profile | 2 | 76 | 99 |
+| Synthetic AIPerf profile | 4 | 66 | 79 |
+| Synthetic AIPerf profile | 8 | 55 | 60 |
+
+The drafter accepted 37% of drafted tokens on natural text and 24% on the
+synthetic profile. A similar gain is expected on `g7e.24xlarge`, but it was
+not measured.
+
+Each level used a small sample of 4–16 requests, so treat these results as
+indicative for this environment only, not as general performance claims.
