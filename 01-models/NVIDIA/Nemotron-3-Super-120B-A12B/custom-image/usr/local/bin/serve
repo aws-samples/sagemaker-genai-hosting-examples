@@ -1,0 +1,26 @@
+#!/bin/bash
+# SageMaker hosting entrypoint for a plain vLLM image (e.g. vllm/vllm-openai).
+#
+# SageMaker starts hosting containers as `<image> serve`. This script reproduces what the
+# SageMaker vLLM Deep Learning Container does in its entrypoint: every SM_VLLM_<FLAG> environment
+# variable becomes a `vllm serve` flag (SM_VLLM_MAX_NUM_SEQS=128 -> --max-num-seqs 128; the value
+# "true" -> a bare flag; "false" -> omitted; JSON objects are passed through as one argument),
+# and the server listens on port 8080. vLLM's OpenAI-compatible server already answers SageMaker's
+# /ping health check and /invocations route, so no extra middleware is needed.
+#
+# Install it at /usr/local/bin/serve (mode 755) in your image; see the notebook for a crane recipe.
+set -euo pipefail
+MODEL="${SM_VLLM_MODEL:-/opt/ml/model}"
+ARGS=("$MODEL" --port 8080 --host 0.0.0.0)
+while IFS= read -r name; do
+  [ "$name" = "SM_VLLM_MODEL" ] && continue
+  val="${!name}"
+  flag="--$(echo "${name#SM_VLLM_}" | tr '[:upper:]_' '[:lower:]-')"
+  case "$val" in
+    true|True|TRUE)    ARGS+=("$flag") ;;
+    false|False|FALSE) ;;
+    *)                 ARGS+=("$flag" "$val") ;;
+  esac
+done < <(compgen -e | grep '^SM_VLLM_' | sort)
+echo "[serve] vllm serve ${ARGS[*]}"
+exec vllm serve "${ARGS[@]}"
