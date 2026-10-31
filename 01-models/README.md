@@ -19,6 +19,7 @@ model-provider -> model name -> code examples
 - [Strands Decider 2B](./StrandsAgents/strands-decider-2B/)
 - [Kimi-K2.7-Code](./Kimi/Kimi-K2.7-Code/)
 - [Reflection Beam 1.0 501B-A23B](./ReflectionAI/Beam-1.0-501B-A23B/) - BF16, FP8, and NVFP4 variants
+- [NVIDIA Nemotron-3-Super-120B-A12B (FP8 inference component, NVFP4)](./NVIDIA/Nemotron-3-Super-120B-A12B/)
 
 ### 2025
 - [GLM-4.5](./Z.ai/GLM-4.5/)
