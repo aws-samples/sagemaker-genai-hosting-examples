@@ -191,7 +191,18 @@ This path deploys the NVFP4 checkpoint to a SageMaker AI real-time endpoint on
 each, SM120) with a bring-your-own-container (BYOC) image and weights that you
 stage to Amazon S3. It is a custom runtime, so you manage the image, weights,
 and vLLM flags yourself. Prefer the JumpStart lifecycle CLI above when its
-supported instance types meet your needs.
+supported instance types meet your needs: JumpStart lists the FP8 variant on
+`ml.g7e.48xlarge` (8 GPUs) with no custom image (not tested in this sample).
+
+**Why a custom image for NVFP4 on `ml.g7e.24xlarge`.** JumpStart supports the
+NVFP4 variant only on `ml.p6-b200.48xlarge`. The same AWS vLLM container
+(`vllm:server-sagemaker-cuda-v2.7`) was tested with the NVFP4 checkpoint on
+EC2 `g7e.24xlarge` using the settings in this sample. Its first start spent
+about 55 minutes autotuning the FlashInfer MoE kernels on these GPUs (SM120)
+and then ran out of GPU memory at `--gpu-memory-utilization 0.92`. That is
+close to the endpoint's 3,600-second startup health-check limit. The image in
+[`container-g7e/`](container-g7e/) (the model-specific vLLM image, with FlashInfer
+0.7.2 instead of 0.7.0) becomes healthy in about 5–6 minutes on the same instance.
 
 | Path | Purpose |
 |---|---|
