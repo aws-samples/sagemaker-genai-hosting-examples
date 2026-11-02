@@ -209,12 +209,17 @@ supported instance types meet your needs.
   parsers. The `serve` entrypoint maps `SM_VLLM_*` environment variables to
   `vllm serve` flags, the same convention as the AWS vLLM DLC.
 - **Instance `ml.g7e.24xlarge`** with quota for `ml.g7e.24xlarge for endpoint
-  usage` (the default is 0).
+  usage` (request an increase in Service Quotas if it is 0).
 - **Inference AMI `al2023-ami-sagemaker-inference-gpu-4-1`** (driver 580 /
   CUDA 13), which matches the image's CUDA 13 build.
-- An IAM execution role with read access to the weights bucket and pull access
-  to your ECR repository. The Beam weights are public; a Hugging Face token is
-  optional and only raises download rate limits.
+- An IAM execution role that trusts `sagemaker.amazonaws.com`, with read access
+  to the weights bucket, pull access to your ECR repository, and CloudWatch Logs
+  write access. In SageMaker Studio the notebook uses the Studio execution role;
+  elsewhere, set `role` in the notebook to this role's ARN. The Beam weights are
+  public; a Hugging Face token is optional and only raises download rate limits.
+- **One Region for everything.** The weights bucket, the ECR image, and the
+  endpoint must be in the same Region. SageMaker does not pull images across
+  Regions.
 
 ### Stage the weights to S3
 
@@ -311,7 +316,10 @@ The SageMaker execution role also needs `ecr:BatchGetImage`,
 ### Deploy with the notebook
 
 Open [`Beam-1.0-501B-A23B-g7e.ipynb`](Beam-1.0-501B-A23B-g7e.ipynb), set
-`bucket` and `ecr_repository`, and run the cells. The notebook creates the
+`bucket` and `ecr_repository` (and `role` outside SageMaker Studio), and run
+the cells. The notebook uses your session's default Region, so set
+`AWS_DEFAULT_REGION` to the Region of your bucket and image before you start
+it. The notebook creates the
 model, endpoint configuration, and endpoint; runs text, tool-calling, and
 streaming requests; and deletes all three resources in its cleanup cell.
 
@@ -333,6 +341,21 @@ startup health-check timeouts. Synchronous `invoke_endpoint` calls time out
 after 60 seconds, so use `invoke_endpoint_with_response_stream` for long
 reasoning generations. Reasoning tokens count against `max_tokens`, so keep it
 at 2,048 or more.
+
+**If the endpoint fails with `InsufficientInstanceCapacity`**, retry later or
+in another Region, or let SageMaker fall back to `ml.g7e.48xlarge`. To fall
+back, create a second model with `SM_VLLM_TENSOR_PARALLEL_SIZE` set to `8`,
+then replace `InstanceType` in the production variant with instance pools:
+
+```python
+"InstancePools": [
+    {"InstanceType": "ml.g7e.24xlarge", "Priority": 1, "ModelNameOverride": model_name_tp4},
+    {"InstanceType": "ml.g7e.48xlarge", "Priority": 2, "ModelNameOverride": model_name_tp8},
+],
+```
+
+SageMaker tries the pools in priority order. No instance is provisioned for a
+failed endpoint, but delete it before you retry.
 
 The endpoint bills for as long as it exists. Run the cleanup cell when you are
 done. The staged weights in S3 and the image in ECR persist and incur storage
@@ -364,43 +387,55 @@ selects the Triton backend when you leave it unset.
 
 ### Validation and limitations
 
-The SageMaker endpoint path in this notebook has **not yet been run end to
-end** because the test account had no `ml.g7e.24xlarge` endpoint quota. The
-engine was validated on Amazon EC2 `g7e.24xlarge` with the same base image
-digest and vLLM flags, served directly without the nginx layer:
+**SageMaker endpoint.** The sample was run end to end on a real-time endpoint
+on `ml.g7e.24xlarge`: the weights and drafter were staged with the CodeBuild
+job, the image was built with the image buildspec, and the endpoint was
+deployed from the notebook cells. It reached `InService` in about 20 minutes,
+including weight loading from S3 and engine warmup.
 
-- The engine became healthy in about 5–6 minutes.
-- Reasoning, tool calling, and needle retrieval from a ~105K-token prompt
-  passed.
+- The notebook's text (reasoning returned separately from the answer), tool
+  calling, and streaming cells passed.
+- Needle retrieval from a ~105K-token prompt passed.
+- Natural-text prompts (up to 1,536 output tokens, temperature 0) through the
+  SageMaker runtime, streaming: 93 output tokens/s per user at 1 concurrent
+  request, and 65 per user (259 total) at 4 concurrent requests.
 
-Throughput was measured with [AIPerf](https://github.com/ai-dynamo/aiperf) at
-12.7K input and up to 5.3K output tokens per request, streaming, directly
-against the engine:
+DFlash2 on the endpoint was not run: every attempt to provision `ml.g7e.24xlarge`
+or `ml.g7e.48xlarge` with the drafter enabled failed with
+`InsufficientInstanceCapacity` during testing. The `SM_VLLM_SPECULATIVE_CONFIG`
+setting above uses the configuration validated on EC2 below with the same
+image.
 
-| Concurrent requests | Time to first token | Inter-token latency | Output tokens/s per user |
-|---:|---:|---:|---:|
-| 2 | 1.75 s | 12.1 ms | 78 |
-| 4 | ~3.0 s | 14.8 ms | 62 |
-| 8 | 4.59 s | 20.8 ms | 44 |
+**Engine performance on Amazon EC2 `g7e.24xlarge`** with the same base image
+and vLLM flags, served directly against the engine. Measured with
+[AIPerf](https://github.com/ai-dynamo/aiperf) at 12.7K input and up to 5.3K
+output tokens per request, streaming, with 16 / 32 / 64 requests at 2 / 4 / 8
+concurrent requests:
 
-For comparison, EC2 `g7e.48xlarge` (8 GPUs, TP8) with the same profile measured
-12.6 / 14.1 / 17.0 ms inter-token latency and 76 / 66 / 55 output tokens/s per
-user at 2 / 4 / 8 concurrent requests.
+| Concurrent requests | Time to first token | Inter-token latency | Output tokens/s per user | Total output tokens/s |
+|---:|---:|---:|---:|---:|
+| 2 | 1.33 s | 12.6 ms | 76 | 148 |
+| 4 | 1.60 s | 15.6 ms | 62 | 231 |
+| 8 | 2.09 s | 21.3 ms | 45 | 346 |
 
-DFlash2 was validated on EC2 `g7e.48xlarge` only, measured with and without the
-drafter on the same instance:
+**DFlash2 on EC2 `g7e.24xlarge`**, measured with and without the drafter on the
+same instance:
 
 | Workload | Concurrency | Tokens/s per user without DFlash2 | With DFlash2 |
 |---|---:|---:|---:|
-| Natural-text prompts | 1 | 83 | 202 |
-| Natural-text prompts | 4 | 72 | 134 |
-| Synthetic AIPerf profile | 2 | 76 | 99 |
-| Synthetic AIPerf profile | 4 | 66 | 79 |
-| Synthetic AIPerf profile | 8 | 55 | 60 |
+| Natural-text prompts | 1 | 96 | 175 |
+| Natural-text prompts | 4 | 67 | 103 |
+| Synthetic AIPerf profile | 2 | 76 | 107 |
+| Synthetic AIPerf profile | 4 | 62 | 75 |
+| Synthetic AIPerf profile | 8 | 45 | 51 |
 
-The drafter accepted 37% of drafted tokens on natural text and 24% on the
-synthetic profile. A similar gain is expected on `g7e.24xlarge`, but it was
-not measured.
+The drafter accepted 34% of drafted tokens on natural text. Synthetic AIPerf
+prompts are random tokens and understate the speculative-decoding gain. Startup
+with the drafter took about 7 minutes on EC2.
 
-Each level used a small sample of 4–16 requests, so treat these results as
-indicative for this environment only, not as general performance claims.
+`ml.g7e.48xlarge` (TP8) is not faster at low concurrency: with the same AIPerf
+profile on EC2 it measured 76 / 66 / 55 output tokens/s per user at 2 / 4 / 8
+concurrent requests.
+
+These results are indicative for this environment only, not general
+performance claims.
