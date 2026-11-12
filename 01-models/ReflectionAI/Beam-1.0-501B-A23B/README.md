@@ -192,7 +192,9 @@ each, SM120) with a bring-your-own-container (BYOC) image and weights that you
 stage to Amazon S3. It is a custom runtime, so you manage the image, weights,
 and vLLM flags yourself. Prefer the JumpStart lifecycle CLI above when its
 supported instance types meet your needs: JumpStart lists the FP8 variant on
-`ml.g7e.48xlarge` (8 GPUs) with no custom image (not tested in this sample).
+`ml.g7e.48xlarge` (8 GPUs) with no custom image (not tested in this sample;
+it uses the same JumpStart vLLM container, which on SM120 may hit the same MoE
+autotune delay described below).
 
 **Why a custom image for NVFP4 on `ml.g7e.24xlarge`.** JumpStart supports the
 NVFP4 variant only on `ml.p6-b200.48xlarge`. The same AWS vLLM container
