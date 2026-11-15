@@ -1,0 +1,27 @@
+#!/bin/bash
+# SageMaker entrypoint: start vLLM on 127.0.0.1:8000, then nginx on :8080 (/ping, /invocations).
+# vLLM flags come from SM_VLLM_* environment variables, the same convention as the AWS vLLM DLC:
+#   SM_VLLM_MAX_MODEL_LEN=65536  -> --max-model-len 65536
+#   SM_VLLM_ENABLE_PREFIX_CACHING=true -> --enable-prefix-caching   (value "false" omits the flag)
+# The `serve` argument SageMaker appends is ignored.
+set -uo pipefail
+
+args=()
+while IFS='=' read -r key value; do
+  flag="--$(echo "${key#SM_VLLM_}" | tr '[:upper:]_' '[:lower:]-')"
+  case "$value" in
+    true)  args+=("$flag") ;;
+    false) ;;
+    *)     args+=("$flag" "$value") ;;
+  esac
+done < <(env | grep '^SM_VLLM_' | sort)
+
+echo "[serve] $(date +%T) vllm serve ${args[*]}"
+nginx -t
+
+vllm serve "${args[@]}" --host 127.0.0.1 --port 8000 &
+VLLM_PID=$!
+# If vLLM exits, stop the container so SageMaker sees the failure instead of a healthy nginx.
+( while kill -0 $VLLM_PID 2>/dev/null; do sleep 5; done; echo "[serve] vLLM exited"; kill 1 ) &
+
+exec nginx -g 'daemon off;'

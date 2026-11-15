@@ -6,6 +6,7 @@ SageMaker JumpStart and SageMaker HyperPod Inference.
 Use these repository samples:
 
 - [JumpStart real-time endpoint](../../../../../01-models/ReflectionAI/Beam-1.0-501B-A23B/README.md)
+- [Custom vLLM container on a real-time endpoint for `ml.g7e.24xlarge`](../../../../../01-models/ReflectionAI/Beam-1.0-501B-A23B/README.md#deploy-nvfp4-on-mlg7e24xlarge-with-a-custom-vllm-container)
 - [HyperPod Inference with JumpStart, SGLang, or vLLM](../../../../../SageMakerHyperpod/reflection-beam/README.md)
 
 ## Apply the framework
